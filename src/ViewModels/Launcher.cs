@@ -489,12 +489,6 @@ namespace SourceGit.ViewModels
                 var name = node.Name;
                 var path = node.Id;
 
-                if (_activePage.Data is Repository { IsRemoteRepository: true })
-                {
-                    // The host name
-                    Title = path;
-                    return;
-                }
 
                 if (!OperatingSystem.IsWindows())
                 {

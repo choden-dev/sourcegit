@@ -175,7 +175,9 @@ namespace SourceGit.ViewModels
 
         private void Refresh()
         {
-            _changes = new Commands.CompareRevisions(_repo, GetSHA(_startPoint), GetSHA(_endPoint)).ReadAsync().Result;
+            _changes = new Commands.CompareRevisions(_repo, GetSHA(_startPoint), GetSHA(_endPoint))
+                .WithGitStrategy(Utils.CommandExtensions.GitStrategyType.Remote)
+                .ReadAsync().Result;
 
             var visible = _changes;
             if (!string.IsNullOrWhiteSpace(_searchFilter))
