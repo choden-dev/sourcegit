@@ -4,9 +4,11 @@ using System.IO;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
-
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
+using SourceGit.Commands;
+using SourceGit.Utils;
+using GC = System.GC;
 
 namespace SourceGit.ViewModels
 {
@@ -87,7 +89,8 @@ namespace SourceGit.ViewModels
                     if (value is not { Count: 1 })
                         DiffContext = null;
                     else
-                        DiffContext = new DiffContext(_repo.FullPath, new Models.DiffOption(_commit, value[0]), _diffContext);
+                        DiffContext = new DiffContext(_repo.FullPath, new Models.DiffOption(_commit, value[0]),
+                            _diffContext, _repo.GitStrategyType);
                 }
             }
         }
@@ -173,7 +176,10 @@ namespace SourceGit.ViewModels
 
         public async Task<List<Models.Decorator>> GetRefsContainsThisCommitAsync()
         {
-            return await new Commands.QueryRefsContainsCommit(_repo.FullPath, _commit.SHA)
+            var queryRefsContainCommitCommand = new Commands.QueryRefsContainsCommit(_repo.FullPath, _commit.SHA);
+            queryRefsContainCommitCommand.ExecutionStrategy =
+                new RemoteGitExecutionStrategy(queryRefsContainCommitCommand);
+            return await queryRefsContainCommitCommand
                 .GetResultAsync()
                 .ConfigureAwait(false);
         }
@@ -219,7 +225,8 @@ namespace SourceGit.ViewModels
                 return;
 
             var baseRevision = _commit.Parents.Count == 0 ? Models.Commit.EmptyTreeSHA1 : _commit.Parents[0];
-            var succ = await Commands.SaveChangesAsPatch.ProcessRevisionCompareChangesAsync(_repo.FullPath, changes, baseRevision, _commit.SHA, saveTo);
+            var succ = await Commands.SaveChangesAsPatch.ProcessRevisionCompareChangesAsync(_repo.FullPath, changes,
+                baseRevision, _commit.SHA, saveTo);
             if (succ)
                 App.SendNotification(_repo.FullPath, App.Text("SaveAsPatchSuccess"));
         }
@@ -236,7 +243,8 @@ namespace SourceGit.ViewModels
             var log = _repo.CreateLog($"Reset File to '{_commit.SHA}~1'");
 
             if (change.Index == Models.ChangeState.Renamed)
-                await new Commands.Checkout(_repo.FullPath).Use(log).FileWithRevisionAsync(change.OriginalPath, $"{_commit.SHA}~1");
+                await new Commands.Checkout(_repo.FullPath).Use(log)
+                    .FileWithRevisionAsync(change.OriginalPath, $"{_commit.SHA}~1");
 
             await new Commands.Checkout(_repo.FullPath).Use(log).FileWithRevisionAsync(change.Path, $"{_commit.SHA}~1");
             log.Complete();
@@ -325,17 +333,17 @@ namespace SourceGit.ViewModels
                 if (!token.IsCancellationRequested)
                     Dispatcher.UIThread.Post(() =>
                     {
-                        FullMessage = new Models.CommitFullMessage
-                        {
-                            Message = message,
-                            Inlines = inlines
-                        };
+                        FullMessage = new Models.CommitFullMessage { Message = message, Inlines = inlines };
                     });
             }, token);
 
             Task.Run(async () =>
             {
-                var signInfo = await new Commands.QueryCommitSignInfo(_repo.FullPath, _commit.SHA, !_repo.HasAllowedSignersFile)
+                var signInfoCommand =
+                    new Commands.QueryCommitSignInfo(_repo.FullPath, _commit.SHA, !_repo.HasAllowedSignersFile)
+                        .WithGitStrategy(_repo.GitStrategyType);
+
+                var signInfo = await signInfoCommand
                     .GetResultAsync()
                     .ConfigureAwait(false);
 
@@ -348,7 +356,10 @@ namespace SourceGit.ViewModels
                 Task.Run(async () =>
                 {
                     var max = Preferences.Instance.MaxHistoryCommits;
-                    var cmd = new Commands.QueryCommitChildren(_repo.FullPath, _commit.SHA, max) { CancellationToken = token };
+                    var cmd = new Commands.QueryCommitChildren(_repo.FullPath, _commit.SHA, max)
+                    {
+                        CancellationToken = token
+                    }.WithGitStrategy(_repo.GitStrategyType);
                     var children = await cmd.GetResultAsync().ConfigureAwait(false);
                     if (!token.IsCancellationRequested)
                         Dispatcher.UIThread.Post(() => Children = children);
@@ -358,7 +369,10 @@ namespace SourceGit.ViewModels
             Task.Run(async () =>
             {
                 var parent = _commit.Parents.Count == 0 ? Models.Commit.EmptyTreeSHA1 : _commit.Parents[0];
-                var cmd = new Commands.CompareRevisions(_repo.FullPath, parent, _commit.SHA) { CancellationToken = token };
+                var cmd = new Commands.CompareRevisions(_repo.FullPath, parent, _commit.SHA)
+                {
+                    CancellationToken = token
+                }.WithGitStrategy(_repo.GitStrategyType);
                 var changes = await cmd.ReadAsync().ConfigureAwait(false);
                 var visible = changes;
                 if (!string.IsNullOrWhiteSpace(_searchChangeFilter))
@@ -418,7 +432,9 @@ namespace SourceGit.ViewModels
                     continue;
 
                 var sha = match.Groups[1].Value;
-                var isCommitSHA = await new Commands.IsCommitSHA(_repo.FullPath, sha).GetResultAsync().ConfigureAwait(false);
+                var isCommitSHACommand = new Commands.IsCommitSHA(_repo.FullPath, sha)
+                    .WithGitStrategy(_repo.GitStrategyType);
+                var isCommitSHA = await isCommitSHACommand.GetResultAsync().ConfigureAwait(false);
                 if (isCommitSHA)
                     inlines.Add(new Models.InlineElement(Models.InlineElementType.CommitSHA, start, len, sha));
             }
@@ -463,7 +479,9 @@ namespace SourceGit.ViewModels
 
                     Task.Run(async () =>
                     {
-                        var files = await new Commands.QueryRevisionFileNames(_repo.FullPath, sha)
+                        var filesCommand = new Commands.QueryRevisionFileNames(_repo.FullPath, sha)
+                            .WithGitStrategy(_repo.GitStrategyType);
+                        var files = await filesCommand
                             .GetResultAsync()
                             .ConfigureAwait(false);
 
@@ -510,18 +528,25 @@ namespace SourceGit.ViewModels
 
         private async Task SetViewingBlobAsync(Models.Object file)
         {
-            var isBinary = await new Commands.IsBinary(_repo.FullPath, _commit.SHA, file.Path).GetResultAsync();
+            var isBinaryCommand = new Commands.IsBinary(_repo.FullPath, _commit.SHA, file.Path)
+                .WithGitStrategy(_repo.GitStrategyType);
+            var isBinary = await isBinaryCommand.GetResultAsync();
             if (isBinary)
             {
                 var imgDecoder = ImageSource.GetDecoder(file.Path);
                 if (imgDecoder != Models.ImageDecoder.None)
                 {
-                    var source = await ImageSource.FromRevisionAsync(_repo.FullPath, _commit.SHA, file.Path, imgDecoder);
+                    var source =
+                        await ImageSource.FromRevisionAsync(_repo.FullPath, _commit.SHA, file.Path, imgDecoder);
                     ViewRevisionFileContent = new Models.RevisionImageFile(file.Path, source.Bitmap, source.Size);
                 }
                 else
                 {
-                    var size = await new Commands.QueryFileSize(_repo.FullPath, file.Path, _commit.SHA).GetResultAsync();
+                    var sizeCommand =
+                        new Commands.QueryFileSize(_repo.FullPath, file.Path, _commit.SHA).WithGitStrategy(_repo.GitStrategyType);
+
+                    var size = await sizeCommand
+                        .GetResultAsync();
                     ViewRevisionFileContent = new Models.RevisionBinaryFile() { Size = size };
                 }
 
@@ -529,6 +554,7 @@ namespace SourceGit.ViewModels
             }
 
             var contentStream = await Commands.QueryFileContent.RunAsync(_repo.FullPath, _commit.SHA, file.Path);
+
             var content = await new StreamReader(contentStream).ReadToEndAsync();
             var lfs = Models.LFSObject.Parse(content);
             if (lfs != null)

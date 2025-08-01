@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Threading.Tasks;
+using SourceGit.Utils;
 
 namespace SourceGit.ViewModels
 {
@@ -20,7 +21,9 @@ namespace SourceGit.ViewModels
         {
             Name = branch.Name;
             Head = branch.Head;
-            Revision = new Commands.QuerySingleCommit(repo.FullPath, branch.Head).GetResultAsync().Result ?? new Models.Commit() { SHA = branch.Head };
+            Revision = new Commands.QuerySingleCommit(repo.FullPath, branch.Head)
+                .WithGitStrategy(repo.GitStrategyType)
+                .GetResultAsync().Result ?? new Models.Commit() { SHA = branch.Head };
         }
     }
 

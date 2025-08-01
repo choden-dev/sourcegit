@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Avalonia.Collections;
@@ -478,7 +479,7 @@ namespace SourceGit.ViewModels
             return FindNodeRecursive(id, RepositoryNodes);
         }
 
-        public RepositoryNode FindOrAddNodeByRepositoryPath(string repo, RepositoryNode parent, bool shouldMoveNode, bool save = true)
+        public RepositoryNode FindOrAddNodeByRepositoryPath(string repo, RepositoryNode parent, bool shouldMoveNode, bool save = true, bool isRemoteRepository = false, string name = null)
         {
             var normalized = repo.Replace('\\', '/').TrimEnd('/');
 
@@ -488,9 +489,10 @@ namespace SourceGit.ViewModels
                 node = new RepositoryNode()
                 {
                     Id = normalized,
-                    Name = Path.GetFileName(normalized),
+                    Name = name ?? Path.GetFileName(normalized),
                     Bookmark = 0,
                     IsRepository = true,
+                    IsRemoteRepository = isRemoteRepository
                 };
 
                 AddNode(node, parent, save);
@@ -722,5 +724,71 @@ namespace SourceGit.ViewModels
         private string _externalMergeToolPath = string.Empty;
 
         private uint _statisticsSampleColor = 0xFF00FF00;
+
+        private Dictionary<string, Models.NodeMapping> _nodeMappings = new Dictionary<string, Models.NodeMapping>();
+
+        [JsonPropertyName("nodeMappings")]
+        public Dictionary<string, Models.NodeMapping> NodeMappings
+        {
+            get => _nodeMappings;
+            set => SetProperty(ref _nodeMappings, value ?? new Dictionary<string, Models.NodeMapping>());
+        }
+
+        public void AddNodeMapping(string nodeId, string hostname, string remoteDirectory)
+        {
+            if (string.IsNullOrWhiteSpace(nodeId))
+                throw new ArgumentException("Node ID cannot be null or empty", nameof(nodeId));
+
+            var mapping = new Models.NodeMapping(nodeId, hostname ?? string.Empty, remoteDirectory ?? string.Empty);
+            _nodeMappings[nodeId] = mapping;
+            OnPropertyChanged(nameof(NodeMappings));
+        }
+
+        public bool RemoveNodeMapping(string nodeId)
+        {
+            if (string.IsNullOrWhiteSpace(nodeId))
+                return false;
+
+            var removed = _nodeMappings.Remove(nodeId);
+            if (removed)
+                OnPropertyChanged(nameof(NodeMappings));
+            return removed;
+        }
+
+        public Models.NodeMapping? GetNodeMapping(string nodeId)
+        {
+            if (string.IsNullOrWhiteSpace(nodeId))
+                return null;
+
+            _nodeMappings.TryGetValue(nodeId, out var mapping);
+            return mapping;
+        }
+
+        public bool HasNodeMapping(string nodeId)
+        {
+            return !string.IsNullOrWhiteSpace(nodeId) && _nodeMappings.ContainsKey(nodeId);
+        }
+
+        public void UpdateNodeMapping(string nodeId, string hostname, string remoteDirectory)
+        {
+            if (string.IsNullOrWhiteSpace(nodeId))
+                throw new ArgumentException("Node ID cannot be null or empty", nameof(nodeId));
+
+            if (_nodeMappings.TryGetValue(nodeId, out var existing))
+            {
+                existing.Hostname = hostname ?? string.Empty;
+                existing.RemoteDirectory = remoteDirectory ?? string.Empty;
+                OnPropertyChanged(nameof(NodeMappings));
+            }
+            else
+            {
+                AddNodeMapping(nodeId, hostname, remoteDirectory);
+            }
+        }
+
+        public IEnumerable<Models.NodeMapping> GetAllNodeMappings()
+        {
+            return _nodeMappings.Values.ToList();
+        }
     }
 }

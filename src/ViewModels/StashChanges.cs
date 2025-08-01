@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
+using SourceGit.Utils;
 
 namespace SourceGit.ViewModels
 {
@@ -69,6 +70,7 @@ namespace SourceGit.ViewModels
                     if (Native.OS.GitVersion >= Models.GitVersions.STASH_PUSH_ONLY_STAGED)
                     {
                         succ = await new Commands.Stash(_repo.FullPath)
+                            .WithGitStrategy(Utils.CommandExtensions.GitStrategyType.Remote)
                             .Use(log)
                             .PushOnlyStagedAsync(Message, keepIndex);
                     }
@@ -87,6 +89,7 @@ namespace SourceGit.ViewModels
                 else
                 {
                     succ = await new Commands.Stash(_repo.FullPath)
+                        .WithGitStrategy(Utils.CommandExtensions.GitStrategyType.Remote)
                         .Use(log)
                         .PushAsync(Message, IncludeUntracked, keepIndex);
                 }
@@ -98,6 +101,7 @@ namespace SourceGit.ViewModels
 
             if (mode == DealWithChangesAfterStashing.KeepAll && succ)
                 succ = await new Commands.Stash(_repo.FullPath)
+                    .WithGitStrategy(Utils.CommandExtensions.GitStrategyType.Remote)
                     .Use(log)
                     .ApplyAsync("stash@{0}", true);
 
@@ -122,6 +126,7 @@ namespace SourceGit.ViewModels
                 var pathSpecFile = Path.GetTempFileName();
                 await File.WriteAllLinesAsync(pathSpecFile, paths);
                 succ = await new Commands.Stash(_repo.FullPath)
+                    .WithGitStrategy(Utils.CommandExtensions.GitStrategyType.Remote)
                     .Use(log)
                     .PushAsync(Message, pathSpecFile, keepIndex)
                     .ConfigureAwait(false);
@@ -134,6 +139,7 @@ namespace SourceGit.ViewModels
                     var count = Math.Min(32, changes.Count - i);
                     var step = changes.GetRange(i, count);
                     succ = await new Commands.Stash(_repo.FullPath)
+                        .WithGitStrategy(Utils.CommandExtensions.GitStrategyType.Remote)
                         .Use(log)
                         .PushAsync(Message, step, keepIndex)
                         .ConfigureAwait(false);

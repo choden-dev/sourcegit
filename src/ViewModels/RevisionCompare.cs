@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
+using SourceGit.Utils;
 
 namespace SourceGit.ViewModels
 {
@@ -49,7 +50,7 @@ namespace SourceGit.ViewModels
                     if (value is { Count: 1 })
                     {
                         var option = new Models.DiffOption(GetSHA(_startPoint), GetSHA(_endPoint), value[0]);
-                        DiffContext = new DiffContext(_repo, option, _diffContext);
+                        DiffContext = new DiffContext(_repo, option, _diffContext, gitStrategy: _gitStrategyType);
                     }
                     else
                     {
@@ -75,12 +76,15 @@ namespace SourceGit.ViewModels
             private set => SetProperty(ref _diffContext, value);
         }
 
-        public RevisionCompare(string repo, Models.Commit startPoint, Models.Commit endPoint)
+        private readonly Utils.CommandExtensions.GitStrategyType _gitStrategyType;
+
+        public RevisionCompare(string repo, Models.Commit startPoint, Models.Commit endPoint, Utils.CommandExtensions.GitStrategyType gitStrategyType)
         {
             _repo = repo;
             _startPoint = (object)startPoint ?? new Models.Null();
             _endPoint = (object)endPoint ?? new Models.Null();
             CanSaveAsPatch = startPoint != null && endPoint != null;
+            _gitStrategyType = gitStrategyType;
 
             Task.Run(Refresh);
         }
@@ -102,7 +106,8 @@ namespace SourceGit.ViewModels
             var opt = new Models.DiffOption(GetSHA(_startPoint), GetSHA(_endPoint), change);
             var toolType = Preferences.Instance.ExternalMergeToolType;
             var toolPath = Preferences.Instance.ExternalMergeToolPath;
-            new Commands.DiffTool(_repo, toolType, toolPath, opt).Open();
+            new Commands.DiffTool(_repo, toolType, toolPath, opt)
+                .WithGitStrategy(Utils.CommandExtensions.GitStrategyType.Remote).Open();
         }
 
         public void NavigateTo(string commitSHA)
@@ -134,7 +139,8 @@ namespace SourceGit.ViewModels
         {
             Task.Run(async () =>
             {
-                var succ = await Commands.SaveChangesAsPatch.ProcessRevisionCompareChangesAsync(_repo, _changes, GetSHA(_startPoint), GetSHA(_endPoint), saveTo);
+                var succ = await Commands.SaveChangesAsPatch.ProcessRevisionCompareChangesAsync(_repo, _changes,
+                    GetSHA(_startPoint), GetSHA(_endPoint), saveTo);
                 if (succ)
                     App.SendNotification(_repo, App.Text("SaveAsPatchSuccess"));
             });

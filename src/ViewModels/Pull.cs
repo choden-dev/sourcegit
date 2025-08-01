@@ -1,6 +1,7 @@
 ﻿using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.Threading.Tasks;
+using SourceGit.Utils;
 
 namespace SourceGit.ViewModels
 {
@@ -119,17 +120,21 @@ namespace SourceGit.ViewModels
             Use(log);
 
             var updateSubmodules = IsRecurseSubmoduleVisible && RecurseSubmodules;
-            var changes = await new Commands.CountLocalChangesWithoutUntracked(_repo.FullPath).GetResultAsync();
+            var changes = await new Commands.CountLocalChangesWithoutUntracked(_repo.FullPath)
+                .WithGitStrategy(_repo.GitStrategyType).GetResultAsync();
             var needPopStash = false;
             if (changes > 0)
             {
                 if (DiscardLocalChanges)
                 {
-                    await Commands.Discard.AllAsync(_repo.FullPath, false, false, log);
+                    // TODO: handle for remote git strategy.
+                    if (!_repo.IsRemoteRepository)
+                        await Commands.Discard.AllAsync(_repo.FullPath, false, false, log);
                 }
                 else
                 {
-                    var succ = await new Commands.Stash(_repo.FullPath).Use(log).PushAsync("PULL_AUTO_STASH");
+                    var succ = await new Commands.Stash(_repo.FullPath).WithGitStrategy(_repo.GitStrategyType).Use(log)
+                        .PushAsync("PULL_AUTO_STASH");
                     if (!succ)
                     {
                         log.Complete();
@@ -144,24 +149,30 @@ namespace SourceGit.ViewModels
             bool rs = await new Commands.Pull(
                 _repo.FullPath,
                 _selectedRemote.Name,
-                !string.IsNullOrEmpty(Current.Upstream) && Current.Upstream.Equals(_selectedBranch.FullName) ? string.Empty : _selectedBranch.Name,
-                UseRebase).Use(log).RunAsync();
+                !string.IsNullOrEmpty(Current.Upstream) && Current.Upstream.Equals(_selectedBranch.FullName) ?
+                    string.Empty :
+                    _selectedBranch.Name,
+                UseRebase).WithGitStrategy(_repo.GitStrategyType).Use(log).RunAsync();
             if (rs)
             {
                 if (updateSubmodules)
                 {
-                    var submodules = await new Commands.QueryUpdatableSubmodules(_repo.FullPath).GetResultAsync();
+                    var submodules = await new Commands.QueryUpdatableSubmodules(_repo.FullPath)
+                        .WithGitStrategy(_repo.GitStrategyType).GetResultAsync();
                     if (submodules.Count > 0)
-                        await new Commands.Submodule(_repo.FullPath).Use(log).UpdateAsync(submodules, true, true);
+                        await new Commands.Submodule(_repo.FullPath).WithGitStrategy(_repo.GitStrategyType).Use(log)
+                            .UpdateAsync(submodules, true, true);
                 }
 
                 if (needPopStash)
-                    await new Commands.Stash(_repo.FullPath).Use(log).PopAsync("stash@{0}");
+                    await new Commands.Stash(_repo.FullPath).WithGitStrategy(_repo.GitStrategyType).Use(log)
+                        .PopAsync("stash@{0}");
             }
 
             log.Complete();
 
-            var head = await new Commands.QueryRevisionByRefName(_repo.FullPath, "HEAD").GetResultAsync();
+            var head = await new Commands.QueryRevisionByRefName(_repo.FullPath, "HEAD")
+                .WithGitStrategy(_repo.GitStrategyType).GetResultAsync();
             _repo.NavigateToCommit(head, true);
             _repo.SetWatcherEnabled(true);
             return rs;

@@ -3,11 +3,10 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using System.Threading.Tasks;
-
 using Avalonia.Collections;
 using Avalonia.Threading;
-
 using CommunityToolkit.Mvvm.ComponentModel;
+using SourceGit.Utils;
 
 namespace SourceGit.ViewModels
 {
@@ -50,6 +49,7 @@ namespace SourceGit.ViewModels
         public async Task<bool> ResetToSelectedRevisionAsync()
         {
             return await new Commands.Checkout(_repo.FullPath)
+                .WithGitStrategy(Utils.CommandExtensions.GitStrategyType.Remote)
                 .FileWithRevisionAsync(_file, $"{_revision.SHA}")
                 .ConfigureAwait(false);
         }
@@ -81,7 +81,8 @@ namespace SourceGit.ViewModels
 
         private void SetViewContentAsRevisionFile()
         {
-            var objs = new Commands.QueryRevisionObjects(_repo.FullPath, _revision.SHA, _file).GetResultAsync().Result;
+            var objs = new Commands.QueryRevisionObjects(_repo.FullPath, _revision.SHA, _file)
+                .WithGitStrategy(Utils.CommandExtensions.GitStrategyType.Remote).GetResultAsync().Result;
             if (objs.Count == 0)
             {
                 ViewContent = new FileHistoriesRevisionFile(_file);
@@ -94,27 +95,36 @@ namespace SourceGit.ViewModels
                 case Models.ObjectType.Blob:
                     Task.Run(async () =>
                     {
-                        var isBinary = await new Commands.IsBinary(_repo.FullPath, _revision.SHA, _file).GetResultAsync().ConfigureAwait(false);
+                        var isBinary = await new Commands.IsBinary(_repo.FullPath, _revision.SHA, _file)
+                            .WithGitStrategy(Utils.CommandExtensions.GitStrategyType.Remote)
+                            .GetResultAsync().ConfigureAwait(false);
                         if (isBinary)
                         {
                             var imgDecoder = ImageSource.GetDecoder(_file);
                             if (imgDecoder != Models.ImageDecoder.None)
                             {
-                                var source = await ImageSource.FromRevisionAsync(_repo.FullPath, _revision.SHA, _file, imgDecoder).ConfigureAwait(false);
+                                var source = await ImageSource
+                                    .FromRevisionAsync(_repo.FullPath, _revision.SHA, _file, imgDecoder)
+                                    .ConfigureAwait(false);
                                 var image = new Models.RevisionImageFile(_file, source.Bitmap, source.Size);
-                                Dispatcher.UIThread.Post(() => ViewContent = new FileHistoriesRevisionFile(_file, image, true));
+                                Dispatcher.UIThread.Post(() =>
+                                    ViewContent = new FileHistoriesRevisionFile(_file, image, true));
                             }
                             else
                             {
-                                var size = await new Commands.QueryFileSize(_repo.FullPath, _file, _revision.SHA).GetResultAsync().ConfigureAwait(false);
+                                var size = await new Commands.QueryFileSize(_repo.FullPath, _file, _revision.SHA)
+                                    .WithGitStrategy(Utils.CommandExtensions.GitStrategyType.Remote)
+                                    .GetResultAsync().ConfigureAwait(false);
                                 var binaryFile = new Models.RevisionBinaryFile() { Size = size };
-                                Dispatcher.UIThread.Post(() => ViewContent = new FileHistoriesRevisionFile(_file, binaryFile, true));
+                                Dispatcher.UIThread.Post(() =>
+                                    ViewContent = new FileHistoriesRevisionFile(_file, binaryFile, true));
                             }
 
                             return;
                         }
 
-                        var contentStream = await Commands.QueryFileContent.RunAsync(_repo.FullPath, _revision.SHA, _file).ConfigureAwait(false);
+                        var contentStream = await Commands.QueryFileContent
+                            .RunAsync(_repo.FullPath, _revision.SHA, _file).ConfigureAwait(false);
                         var content = await new StreamReader(contentStream).ReadToEndAsync();
                         var lfs = Models.LFSObject.Parse(content);
                         if (lfs != null)
@@ -123,18 +133,21 @@ namespace SourceGit.ViewModels
                             if (imgDecoder != Models.ImageDecoder.None)
                             {
                                 var combined = new RevisionLFSImage(_repo.FullPath, _file, lfs, imgDecoder);
-                                Dispatcher.UIThread.Post(() => ViewContent = new FileHistoriesRevisionFile(_file, combined, true));
+                                Dispatcher.UIThread.Post(() =>
+                                    ViewContent = new FileHistoriesRevisionFile(_file, combined, true));
                             }
                             else
                             {
                                 var rlfs = new Models.RevisionLFSObject() { Object = lfs };
-                                Dispatcher.UIThread.Post(() => ViewContent = new FileHistoriesRevisionFile(_file, rlfs, true));
+                                Dispatcher.UIThread.Post(() =>
+                                    ViewContent = new FileHistoriesRevisionFile(_file, rlfs, true));
                             }
                         }
                         else
                         {
                             var txt = new Models.RevisionTextFile() { FileName = obj.Path, Content = content };
-                            Dispatcher.UIThread.Post(() => ViewContent = new FileHistoriesRevisionFile(_file, txt, true));
+                            Dispatcher.UIThread.Post(() =>
+                                ViewContent = new FileHistoriesRevisionFile(_file, txt, true));
                         }
                     });
                     break;
@@ -142,8 +155,16 @@ namespace SourceGit.ViewModels
                     Task.Run(async () =>
                     {
                         var submoduleRoot = Path.Combine(_repo.FullPath, _file);
-                        var commit = await new Commands.QuerySingleCommit(submoduleRoot, obj.SHA).GetResultAsync().ConfigureAwait(false);
-                        var message = commit != null ? await new Commands.QueryCommitFullMessage(submoduleRoot, obj.SHA).GetResultAsync().ConfigureAwait(false) : null;
+                        var commit = await new Commands.QuerySingleCommit(submoduleRoot, obj.SHA)
+                            .WithGitStrategy(Utils.CommandExtensions.GitStrategyType.Remote)
+                            .GetResultAsync()
+                            .ConfigureAwait(false);
+                        var message = commit != null ?
+                            await new Commands.QueryCommitFullMessage(submoduleRoot, obj.SHA)
+                                .WithGitStrategy(Utils.CommandExtensions.GitStrategyType.Remote)
+                                .GetResultAsync()
+                                .ConfigureAwait(false) :
+                            null;
                         var module = new Models.RevisionSubmodule()
                         {
                             Commit = commit ?? new Models.Commit() { SHA = obj.SHA },
@@ -162,7 +183,7 @@ namespace SourceGit.ViewModels
         private void SetViewContentAsDiff()
         {
             var option = new Models.DiffOption(_revision, _file);
-            ViewContent = new DiffContext(_repo.FullPath, option, _viewContent as DiffContext);
+            ViewContent = new DiffContext(_repo.FullPath, option, _viewContent as DiffContext, gitStrategy: _repo.GitStrategyType);
         }
 
         private Repository _repo = null;
@@ -218,7 +239,9 @@ namespace SourceGit.ViewModels
         {
             Task.Run(async () =>
             {
-                _changes = await new Commands.CompareRevisions(_repo.FullPath, _startPoint.SHA, _endPoint.SHA, _file).ReadAsync().ConfigureAwait(false);
+                _changes = await new Commands.CompareRevisions(_repo.FullPath, _startPoint.SHA, _endPoint.SHA, _file)
+                    .WithGitStrategy(Utils.CommandExtensions.GitStrategyType.Remote)
+                    .ReadAsync().ConfigureAwait(false);
                 if (_changes.Count == 0)
                 {
                     Dispatcher.UIThread.Post(() => ViewContent = null);
@@ -226,7 +249,7 @@ namespace SourceGit.ViewModels
                 else
                 {
                     var option = new Models.DiffOption(_startPoint.SHA, _endPoint.SHA, _changes[0]);
-                    Dispatcher.UIThread.Post(() => ViewContent = new DiffContext(_repo.FullPath, option, _viewContent));
+                    Dispatcher.UIThread.Post(() => ViewContent = new DiffContext(_repo.FullPath, option, _viewContent, gitStrategy: _repo.GitStrategyType));
                 }
             });
         }
@@ -289,6 +312,7 @@ namespace SourceGit.ViewModels
                     .Append(file.Quoted());
 
                 var commits = await new Commands.QueryCommits(_repo.FullPath, argsBuilder.ToString(), false)
+                    .WithGitStrategy(Utils.CommandExtensions.GitStrategyType.Remote)
                     .GetResultAsync()
                     .ConfigureAwait(false);
 
@@ -326,7 +350,8 @@ namespace SourceGit.ViewModels
             if (_fullCommitMessages.TryGetValue(sha, out var msg))
                 return msg;
 
-            msg = new Commands.QueryCommitFullMessage(_repo.FullPath, sha).GetResultAsync().Result;
+            msg = new Commands.QueryCommitFullMessage(_repo.FullPath, sha)
+                .WithGitStrategy(Utils.CommandExtensions.GitStrategyType.Remote).GetResultAsync().Result;
             _fullCommitMessages[sha] = msg;
             return msg;
         }

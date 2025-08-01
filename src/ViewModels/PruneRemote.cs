@@ -1,4 +1,5 @@
 ﻿using System.Threading.Tasks;
+using SourceGit.Utils;
 
 namespace SourceGit.ViewModels
 {
@@ -24,6 +25,7 @@ namespace SourceGit.ViewModels
             Use(log);
 
             var succ = await new Commands.Remote(_repo.FullPath)
+                .WithGitStrategy(Utils.CommandExtensions.GitStrategyType.Remote)
                 .Use(log)
                 .PruneAsync(Remote.Name);
 

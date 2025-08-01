@@ -1,6 +1,7 @@
 ﻿using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.Threading.Tasks;
+using SourceGit.Utils;
 
 namespace SourceGit.ViewModels
 {
@@ -176,7 +177,7 @@ namespace SourceGit.ViewModels
                 PushAllTags,
                 _repo.Submodules.Count > 0 && CheckSubmodules,
                 _isSetTrackOptionVisible && Tracking,
-                ForcePush).Use(log).RunAsync();
+                ForcePush).WithGitStrategy(Utils.CommandExtensions.GitStrategyType.Remote).Use(log).RunAsync();
 
             log.Complete();
             _repo.SetWatcherEnabled(true);
@@ -219,11 +220,7 @@ namespace SourceGit.ViewModels
             }
 
             // Add a fake new branch.
-            var fake = new Models.Branch()
-            {
-                Name = _selectedLocalBranch.Name,
-                Remote = _selectedRemote.Name,
-            };
+            var fake = new Models.Branch() { Name = _selectedLocalBranch.Name, Remote = _selectedRemote.Name, };
             branches.Add(fake);
             RemoteBranches = branches;
             SelectedRemoteBranch = fake;

@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
+using SourceGit.Utils;
 
 namespace SourceGit.ViewModels
 {
@@ -61,6 +62,7 @@ namespace SourceGit.ViewModels
                         Task.Run(async () =>
                         {
                             var changes = await new Commands.CompareRevisions(_repo.FullPath, $"{value.SHA}^", value.SHA)
+                                .WithGitStrategy(Utils.CommandExtensions.GitStrategyType.Remote)
                                 .ReadAsync()
                                 .ConfigureAwait(false);
 
@@ -68,6 +70,7 @@ namespace SourceGit.ViewModels
                             if (value.Parents.Count == 3)
                             {
                                 untracked = await new Commands.CompareRevisions(_repo.FullPath, Models.Commit.EmptyTreeSHA1, value.Parents[2])
+                                    .WithGitStrategy(Utils.CommandExtensions.GitStrategyType.Remote)
                                     .ReadAsync()
                                     .ConfigureAwait(false);
 
@@ -111,9 +114,9 @@ namespace SourceGit.ViewModels
                     if (value is not { Count: 1 })
                         DiffContext = null;
                     else if (_untracked.Contains(value[0]))
-                        DiffContext = new DiffContext(_repo.FullPath, new Models.DiffOption(Models.Commit.EmptyTreeSHA1, _selectedStash.Parents[2], value[0]), _diffContext);
+                        DiffContext = new DiffContext(_repo.FullPath, new Models.DiffOption(Models.Commit.EmptyTreeSHA1, _selectedStash.Parents[2], value[0]), _diffContext, gitStrategy: _repo.GitStrategyType);
                     else
-                        DiffContext = new DiffContext(_repo.FullPath, new Models.DiffOption(_selectedStash.Parents[0], _selectedStash.SHA, value[0]), _diffContext);
+                        DiffContext = new DiffContext(_repo.FullPath, new Models.DiffOption(_selectedStash.Parents[0], _selectedStash.SHA, value[0]), _diffContext, _repo.GitStrategyType);
                 }
             }
         }
@@ -162,6 +165,7 @@ namespace SourceGit.ViewModels
         {
             var opts = new List<Models.DiffOption>();
             var changes = await new Commands.CompareRevisions(_repo.FullPath, $"{stash.SHA}^", stash.SHA)
+                .WithGitStrategy(Utils.CommandExtensions.GitStrategyType.Remote)
                 .ReadAsync()
                 .ConfigureAwait(false);
 
@@ -171,6 +175,7 @@ namespace SourceGit.ViewModels
             if (stash.Parents.Count == 3)
             {
                 var untracked = await new Commands.CompareRevisions(_repo.FullPath, Models.Commit.EmptyTreeSHA1, stash.Parents[2])
+                    .WithGitStrategy(Utils.CommandExtensions.GitStrategyType.Remote)
                     .ReadAsync()
                     .ConfigureAwait(false);
 

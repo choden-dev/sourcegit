@@ -1,0 +1,88 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:SourceGit.ViewModels"
+             mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+             x:Class="SourceGit.Views.AddRemoteRepository"
+             x:DataType="vm:AddRemoteRepository">
+  <StackPanel Orientation="Vertical" Margin="8,0">
+    <!-- Title -->
+    <TextBlock FontSize="18"
+               Classes="bold"
+               Text="Init Remote Repository"/>
+
+    <!-- Form Grid -->
+    <Grid Margin="0,16,0,0"
+          ColumnDefinitions="150,*,Auto"
+          RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+
+      <!-- SSH Config File Path (Optional) -->
+      <TextBlock Grid.Row="0" Grid.Column="0"
+                 HorizontalAlignment="Right" VerticalAlignment="Center"
+                 Margin="0,0,8,0"
+                 Text="SSH Config File:"/>
+      <TextBox Grid.Row="0" Grid.Column="1"
+               Name="SshConfigPathTextBox"
+               Height="28" Margin="0,6"
+               Text="{Binding SshConfigPath}"
+               Watermark="(optional) Path to SSH config file"/>
+      <Button Grid.Row="0" Grid.Column="2"
+              Name="BrowseSshConfigButton"
+              Content="..."
+              Height="28" Width="28" Margin="8,6,0,6"
+              ToolTip.Tip="Browse for SSH config file"/>
+      
+      <!-- SSH Config Validation Error -->
+      <TextBlock Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2"
+                 Name="SshConfigErrorText"
+                 Foreground="Red"
+                 FontSize="12"
+                 Margin="0,0,0,6"
+                 TextWrapping="Wrap"
+                 IsVisible="False"/>
+
+      <!-- Host Name -->
+      <TextBlock Grid.Row="2" Grid.Column="0"
+                 HorizontalAlignment="Right" VerticalAlignment="Center"
+                 Margin="0,0,8,0"
+                 Text="Host Name:*"/>
+      <TextBox Grid.Row="2" Grid.Column="1"
+               Name="HostNameTextBox"
+               Height="28" Margin="0,6"
+               Text="{Binding HostName}"
+               Watermark="user@hostname or hostname"
+               Grid.ColumnSpan="2"/>
+      
+      <!-- Host Name Validation Error -->
+      <TextBlock Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="2"
+                 Name="HostNameErrorText"
+                 Foreground="Red"
+                 FontSize="12"
+                 Margin="0,0,0,6"
+                 TextWrapping="Wrap"
+                 IsVisible="False"/>
+
+      <!-- Working Directory -->
+      <TextBlock Grid.Row="4" Grid.Column="0"
+                 HorizontalAlignment="Right" VerticalAlignment="Center"
+                 Margin="0,0,8,0"
+                 Text="Working Directory:*"/>
+      <TextBox Grid.Row="4" Grid.Column="1"
+               Name="WorkingDirectoryTextBox"
+               Height="28" Margin="0,6"
+               Text="{Binding WorkingDirectory}"
+               Watermark="Remote directory path where git commands will be executed"
+               Grid.ColumnSpan="2"/>
+      
+      <!-- Working Directory Validation Error -->
+      <TextBlock Grid.Row="5" Grid.Column="1" Grid.ColumnSpan="2"
+                 Name="WorkingDirectoryErrorText"
+                 Foreground="Red"
+                 FontSize="12"
+                 Margin="0,0,0,6"
+                 TextWrapping="Wrap"
+                 IsVisible="False"/>
+    </Grid>
+  </StackPanel>
+</UserControl>

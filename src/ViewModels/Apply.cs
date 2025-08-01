@@ -1,6 +1,7 @@
 ﻿using System.ComponentModel.DataAnnotations;
 using System.IO;
 using System.Threading.Tasks;
+using SourceGit.Utils;
 
 namespace SourceGit.ViewModels
 {
@@ -50,6 +51,7 @@ namespace SourceGit.ViewModels
             Use(log);
 
             var succ = await new Commands.Apply(_repo.FullPath, _patchFile, _ignoreWhiteSpace, SelectedWhiteSpaceMode.Arg, null)
+                .WithGitStrategy(_repo.GitStrategyType)
                 .Use(log)
                 .ExecAsync();
 

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
+using SourceGit.Utils;
 
 namespace SourceGit.ViewModels
 {
@@ -57,7 +58,8 @@ namespace SourceGit.ViewModels
                 if (SetProperty(ref _selectedChanges, value))
                 {
                     if (value is { Count: 1 })
-                        DiffContext = new DiffContext(_repo, new Models.DiffOption(_based.Head, _to.Head, value[0]), _diffContext);
+                        DiffContext = new DiffContext(_repo, new Models.DiffOption(_based.Head, _to.Head, value[0]),
+                            _diffContext, _gitStrategyType);
                     else
                         DiffContext = null;
                 }
@@ -80,11 +82,15 @@ namespace SourceGit.ViewModels
             private set => SetProperty(ref _diffContext, value);
         }
 
-        public BranchCompare(string repo, Models.Branch baseBranch, Models.Branch toBranch)
+        private readonly Utils.CommandExtensions.GitStrategyType _gitStrategyType;
+
+        public BranchCompare(string repo, Models.Branch baseBranch, Models.Branch toBranch,
+            Utils.CommandExtensions.GitStrategyType gitStrategyType)
         {
             _repo = repo;
             _based = baseBranch;
             _to = toBranch;
+            _gitStrategyType = gitStrategyType;
 
             Refresh();
         }
@@ -136,11 +142,13 @@ namespace SourceGit.ViewModels
             {
                 if (_baseHead == null)
                 {
-                    var baseHead = await new Commands.QuerySingleCommit(_repo, _based.Head)
+                    var singleCommitCommand = new Commands.QuerySingleCommit(_repo, _based.Head)
+                        .WithGitStrategy(_gitStrategyType);
+                    var baseHead = await singleCommitCommand
                         .GetResultAsync()
                         .ConfigureAwait(false);
 
-                    var toHead = await new Commands.QuerySingleCommit(_repo, _to.Head)
+                    var toHead = await singleCommitCommand
                         .GetResultAsync()
                         .ConfigureAwait(false);
 
@@ -151,7 +159,9 @@ namespace SourceGit.ViewModels
                     });
                 }
 
-                _changes = await new Commands.CompareRevisions(_repo, _based.Head, _to.Head)
+                var compareRevisionsCommand =
+                    new Commands.CompareRevisions(_repo, _based.Head, _to.Head).WithGitStrategy(_gitStrategyType);
+                _changes = await compareRevisionsCommand
                     .ReadAsync()
                     .ConfigureAwait(false);
 

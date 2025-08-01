@@ -1,4 +1,5 @@
 ﻿using System.Threading.Tasks;
+using SourceGit.Utils;
 
 namespace SourceGit.ViewModels
 {
@@ -18,6 +19,7 @@ namespace SourceGit.ViewModels
             Use(log);
 
             await new Commands.GC(_repo.FullPath)
+                .WithGitStrategy(Utils.CommandExtensions.GitStrategyType.Remote)
                 .Use(log)
                 .ExecAsync();
 

@@ -1,4 +1,5 @@
 ﻿using System.Threading.Tasks;
+using SourceGit.Utils;
 
 namespace SourceGit.ViewModels
 {
@@ -42,6 +43,7 @@ namespace SourceGit.ViewModels
 
             if (succ && DropAfterApply)
                 await new Commands.Stash(_repo.FullPath)
+                    .WithGitStrategy(_repo.GitStrategyType)
                     .Use(log)
                     .DropAsync(Stash.Name);
 

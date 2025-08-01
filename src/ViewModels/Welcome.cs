@@ -99,20 +99,25 @@ namespace SourceGit.ViewModels
                     return null;
             }
 
-            var isBare = await new Commands.IsBareRepository(root).GetResultAsync();
+            var isBareCommand = new Commands.IsBareRepository(root);
+            isBareCommand.ExecutionStrategy = new Commands.RemoteGitExecutionStrategy(isBareCommand);
+            var isBare = await isBareCommand.GetResultAsync();
             if (isBare)
                 return root;
 
-            var rs = await new Commands.QueryRepositoryRootPath(root).GetResultAsync();
+            var queryRootCommand = new Commands.QueryRepositoryRootPath(root);
+            queryRootCommand.ExecutionStrategy = new Commands.RemoteGitExecutionStrategy(queryRootCommand);
+            var rs = await queryRootCommand.GetResultAsync();
+
             if (!rs.IsSuccess || string.IsNullOrWhiteSpace(rs.StdOut))
                 return null;
 
             return rs.StdOut.Trim();
         }
 
-        public void InitRepository(string path, RepositoryNode parent, string reason)
+        public void InitRepository(string path, RepositoryNode parent, string reason, bool isRemoteRepository = false)
         {
-            if (!Preferences.Instance.IsGitConfigured())
+            if (!Preferences.Instance.IsGitConfigured() && !isRemoteRepository)
             {
                 App.RaiseException(string.Empty, App.Text("NotConfigured"));
                 return;

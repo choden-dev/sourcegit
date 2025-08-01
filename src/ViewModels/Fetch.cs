@@ -1,5 +1,6 @@
 ﻿using System.Collections.Generic;
 using System.Threading.Tasks;
+using SourceGit.Utils;
 
 namespace SourceGit.ViewModels
 {
@@ -66,13 +67,17 @@ namespace SourceGit.ViewModels
             if (FetchAllRemotes)
             {
                 foreach (var remote in _repo.Remotes)
+                {
                     await new Commands.Fetch(_repo.FullPath, remote.Name, notags, force)
+                        .WithGitStrategy(Utils.CommandExtensions.GitStrategyType.Remote)
                         .Use(log)
                         .RunAsync();
+                }
             }
             else
             {
                 await new Commands.Fetch(_repo.FullPath, SelectedRemote.Name, notags, force)
+                    .WithGitStrategy(Utils.CommandExtensions.GitStrategyType.Remote)
                     .Use(log)
                     .RunAsync();
             }
@@ -82,7 +87,8 @@ namespace SourceGit.ViewModels
             var upstream = _repo.CurrentBranch?.Upstream;
             if (!string.IsNullOrEmpty(upstream))
             {
-                var upstreamHead = await new Commands.QueryRevisionByRefName(_repo.FullPath, upstream.Substring(13)).GetResultAsync();
+                var upstreamHead = await new Commands.QueryRevisionByRefName(_repo.FullPath, upstream.Substring(13))
+                    .WithGitStrategy(Utils.CommandExtensions.GitStrategyType.Remote).GetResultAsync();
                 _repo.NavigateToCommit(upstreamHead, true);
             }
 

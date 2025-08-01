@@ -36,6 +36,12 @@ namespace SourceGit.ViewModels
             set => SetProperty(ref _isRepository, value);
         }
 
+        public bool IsRemoteRepository
+        {
+            get => _isRemoteRepository;
+            set => SetProperty(ref _isRemoteRepository, value);
+        }
+
         public bool IsExpanded
         {
             get => _isExpanded;
@@ -103,7 +109,7 @@ namespace SourceGit.ViewModels
 
         public void OpenInFileManager()
         {
-            if (!IsRepository)
+            if (!IsRepository || _isRemoteRepository)
                 return;
             Native.OS.OpenInFileManager(_id);
         }
@@ -128,5 +134,6 @@ namespace SourceGit.ViewModels
         private int _bookmark = 0;
         private bool _isExpanded = false;
         private bool _isVisible = true;
+        private bool _isRemoteRepository = false;
     }
 }

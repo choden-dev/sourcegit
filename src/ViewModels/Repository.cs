@@ -5,11 +5,12 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-
 using Avalonia.Collections;
 using Avalonia.Threading;
-
 using CommunityToolkit.Mvvm.ComponentModel;
+using SourceGit.Strategies;
+using SourceGit.Utils;
+using GC = System.GC;
 
 namespace SourceGit.ViewModels
 {
@@ -307,7 +308,8 @@ namespace SourceGit.ViewModels
             get => _onlySearchCommitsInCurrentBranch;
             set
             {
-                if (SetProperty(ref _onlySearchCommitsInCurrentBranch, value) && !string.IsNullOrEmpty(_searchCommitFilter))
+                if (SetProperty(ref _onlySearchCommitsInCurrentBranch, value) &&
+                    !string.IsNullOrEmpty(_searchCommitFilter))
                     StartSearchCommits();
             }
         }
@@ -428,7 +430,8 @@ namespace SourceGit.ViewModels
             get => _settings.LocalBranchSortMode == Models.BranchSortMode.Name;
             set
             {
-                _settings.LocalBranchSortMode = value ? Models.BranchSortMode.Name : Models.BranchSortMode.CommitterDate;
+                _settings.LocalBranchSortMode =
+                    value ? Models.BranchSortMode.Name : Models.BranchSortMode.CommitterDate;
                 OnPropertyChanged();
 
                 var builder = BuildBranchTree(_branches, _remotes);
@@ -442,7 +445,8 @@ namespace SourceGit.ViewModels
             get => _settings.RemoteBranchSortMode == Models.BranchSortMode.Name;
             set
             {
-                _settings.RemoteBranchSortMode = value ? Models.BranchSortMode.Name : Models.BranchSortMode.CommitterDate;
+                _settings.RemoteBranchSortMode =
+                    value ? Models.BranchSortMode.Name : Models.BranchSortMode.CommitterDate;
                 OnPropertyChanged();
 
                 var builder = BuildBranchTree(_branches, _remotes);
@@ -503,50 +507,40 @@ namespace SourceGit.ViewModels
             private set;
         } = new AvaloniaList<CommandLog>();
 
-        public Repository(bool isBare, string path, string gitDir)
+        public IRepositoryStrategy RepositoryStrategy
+        {
+            get;
+            set;
+        } = new LocalRepositoryStrategy();
+
+        public bool IsRemoteRepository
+        {
+            get;
+        } = false;
+
+
+        public Repository(bool isBare, string path, string gitDir, bool isRemoteRepository)
         {
             IsBare = isBare;
             FullPath = path;
             GitDir = gitDir;
+            if (isRemoteRepository)
+            {
+                RepositoryStrategy = new RemoteRepositoryStrategy();
+            }
+
+            GitStrategyType = isRemoteRepository ?
+                Utils.CommandExtensions.GitStrategyType.Remote :
+                Utils.CommandExtensions.GitStrategyType.Local;
         }
+
+        public readonly Utils.CommandExtensions.GitStrategyType GitStrategyType;
 
         public void Open()
         {
-            var settingsFile = Path.Combine(_gitDir, "sourcegit.settings");
-            if (File.Exists(settingsFile))
-            {
-                try
-                {
-                    using var stream = File.OpenRead(settingsFile);
-                    _settings = JsonSerializer.Deserialize(stream, JsonCodeGen.Default.RepositorySettings);
-                }
-                catch
-                {
-                    _settings = new Models.RepositorySettings();
-                }
-            }
-            else
-            {
-                _settings = new Models.RepositorySettings();
-            }
+            _settings = RepositoryStrategy.LoadSettings(this);
 
-            try
-            {
-                // For worktrees, we need to watch the $GIT_COMMON_DIR instead of the $GIT_DIR.
-                var gitDirForWatcher = _gitDir;
-                if (_gitDir.Replace('\\', '/').IndexOf("/worktrees/", StringComparison.Ordinal) > 0)
-                {
-                    var commonDir = new Commands.QueryGitCommonDir(_fullpath).GetResultAsync().Result;
-                    if (!string.IsNullOrEmpty(commonDir))
-                        gitDirForWatcher = commonDir;
-                }
-
-                _watcher = new Models.Watcher(this, _fullpath, gitDirForWatcher);
-            }
-            catch (Exception ex)
-            {
-                App.RaiseException(string.Empty, $"Failed to start watcher for repository: '{_fullpath}'. You may need to press 'F5' to refresh repository manually!\n\nReason: {ex.Message}");
-            }
+            _watcher = RepositoryStrategy.SetupWatcher(this);
 
             if (_settings.HistoriesFilters.Count > 0)
                 _historiesFilterMode = _settings.HistoriesFilters[0].Mode;
@@ -571,9 +565,13 @@ namespace SourceGit.ViewModels
 
             try
             {
-                _settings.LastCommitMessage = _workingCopy.CommitMessage;
-                using var stream = File.Create(Path.Combine(_gitDir, "sourcegit.settings"));
-                JsonSerializer.Serialize(stream, _settings, JsonCodeGen.Default.RepositorySettings);
+                // TODO: Save settings for remote repositories
+                if (!IsRemoteRepositoryStrategy())
+                {
+                    _settings.LastCommitMessage = _workingCopy.CommitMessage;
+                    using var stream = File.Create(Path.Combine(_gitDir, "sourcegit.settings"));
+                    JsonSerializer.Serialize(stream, _settings, JsonCodeGen.Default.RepositorySettings);
+                }
             }
             catch
             {
@@ -639,8 +637,8 @@ namespace SourceGit.ViewModels
         public bool IsGitFlowEnabled()
         {
             return GitFlow is { IsValid: true } &&
-                _branches.Find(x => x.IsLocal && x.Name.Equals(GitFlow.Master, StringComparison.Ordinal)) != null &&
-                _branches.Find(x => x.IsLocal && x.Name.Equals(GitFlow.Develop, StringComparison.Ordinal)) != null;
+                   _branches.Find(x => x.IsLocal && x.Name.Equals(GitFlow.Master, StringComparison.Ordinal)) != null &&
+                   _branches.Find(x => x.IsLocal && x.Name.Equals(GitFlow.Develop, StringComparison.Ordinal)) != null;
         }
 
         public Models.GitFlowBranchType GetGitFlowType(Models.Branch b)
@@ -782,7 +780,8 @@ namespace SourceGit.ViewModels
                 });
 
                 var config = await new Commands.Config(_fullpath).ReadAllAsync().ConfigureAwait(false);
-                _hasAllowedSignersFile = config.TryGetValue("gpg.ssh.allowedSignersFile", out var allowedSignersFile) && !string.IsNullOrEmpty(allowedSignersFile);
+                _hasAllowedSignersFile = config.TryGetValue("gpg.ssh.allowedSignersFile", out var allowedSignersFile) &&
+                                         !string.IsNullOrEmpty(allowedSignersFile);
 
                 if (config.TryGetValue("gitflow.branch.master", out var masterName))
                     GitFlow.Master = masterName;
@@ -923,11 +922,12 @@ namespace SourceGit.ViewModels
 
                 if (method == Models.CommitSearchMethod.BySHA)
                 {
-                    var isCommitSHA = await new Commands.IsCommitSHA(_fullpath, _searchCommitFilter)
+                    var isCommitSha = await new Commands.IsCommitSHA(_fullpath, _searchCommitFilter)
+                        .WithGitStrategy(GitStrategyType)
                         .GetResultAsync()
                         .ConfigureAwait(false);
 
-                    if (isCommitSHA)
+                    if (isCommitSha)
                     {
                         var commit = await new Commands.QuerySingleCommit(_fullpath, _searchCommitFilter)
                             .GetResultAsync()
@@ -937,7 +937,9 @@ namespace SourceGit.ViewModels
                 }
                 else
                 {
-                    visible = await new Commands.QueryCommits(_fullpath, _searchCommitFilter, method, _onlySearchCommitsInCurrentBranch)
+                    visible = await new Commands.QueryCommits(_fullpath, _searchCommitFilter, method,
+                            _onlySearchCommitsInCurrentBranch)
+                        .WithGitStrategy(GitStrategyType)
                         .GetResultAsync()
                         .ConfigureAwait(false);
                 }
@@ -1035,7 +1037,9 @@ namespace SourceGit.ViewModels
         {
             if (_settings.HistoriesFilters.Remove(filter))
             {
-                HistoriesFilterMode = _settings.HistoriesFilters.Count > 0 ? _settings.HistoriesFilters[0].Mode : Models.FilterMode.None;
+                HistoriesFilterMode = _settings.HistoriesFilters.Count > 0 ?
+                    _settings.HistoriesFilters[0].Mode :
+                    Models.FilterMode.None;
                 RefreshHistoriesFilters(true);
             }
         }
@@ -1136,7 +1140,8 @@ namespace SourceGit.ViewModels
             await _workingCopy?.AbortMergeAsync();
         }
 
-        public List<(Models.CustomAction, CustomActionContextMenuLabel)> GetCustomActions(Models.CustomActionScope scope)
+        public List<(Models.CustomAction, CustomActionContextMenuLabel)> GetCustomActions(
+            Models.CustomActionScope scope)
         {
             var actions = new List<(Models.CustomAction, CustomActionContextMenuLabel)>();
 
@@ -1162,10 +1167,12 @@ namespace SourceGit.ViewModels
 
             var log = CreateLog($"Bisect({subcmd})");
 
-            var succ = await new Commands.Bisect(_fullpath, subcmd).Use(log).ExecAsync();
+            var succ = await new Commands.Bisect(_fullpath, subcmd).WithGitStrategy(GitStrategyType).Use(log)
+                .ExecAsync();
             log.Complete();
 
-            var head = await new Commands.QueryRevisionByRefName(_fullpath, "HEAD").GetResultAsync();
+            var head = await new Commands.QueryRevisionByRefName(_fullpath, "HEAD").WithGitStrategy(GitStrategyType)
+                .GetResultAsync();
             if (!succ)
                 App.RaiseException(_fullpath, log.Content.Substring(log.Content.IndexOf('\n')).Trim());
             else if (log.Content.Contains("is the first bad commit"))
@@ -1186,8 +1193,12 @@ namespace SourceGit.ViewModels
 
         public void RefreshBranches()
         {
-            var branches = new Commands.QueryBranches(_fullpath).GetResultAsync().Result;
-            var remotes = new Commands.QueryRemotes(_fullpath).GetResultAsync().Result;
+            var branchesCommand = new Commands.QueryBranches(_fullpath).WithGitStrategy(GitStrategyType);
+            var branches = branchesCommand.GetResultAsync().Result;
+
+            var remotesCommand = new Commands.QueryRemotes(_fullpath).WithGitStrategy(GitStrategyType);
+            var remotes = remotesCommand.GetResultAsync().Result;
+
             var builder = BuildBranchTree(branches, remotes);
 
             Dispatcher.UIThread.Invoke(() =>
@@ -1206,6 +1217,7 @@ namespace SourceGit.ViewModels
                     if (b.IsLocal && !b.IsDetachedHead)
                         localBranchesCount++;
                 }
+
                 LocalBranchesCount = localBranchesCount;
 
                 if (_workingCopy != null)
@@ -1218,7 +1230,8 @@ namespace SourceGit.ViewModels
 
         public void RefreshWorktrees()
         {
-            var worktrees = new Commands.Worktree(_fullpath).ReadAllAsync().Result;
+            var worktreeCommand = new Commands.Worktree(_fullpath).WithGitStrategy(GitStrategyType);
+            var worktrees = worktreeCommand.ReadAllAsync().Result;
             var cleaned = new List<Models.Worktree>();
 
             foreach (var worktree in worktrees)
@@ -1237,7 +1250,8 @@ namespace SourceGit.ViewModels
 
         public void RefreshTags()
         {
-            var tags = new Commands.QueryTags(_fullpath).GetResultAsync().Result;
+            var tagsCommand = new Commands.QueryTags(_fullpath).WithGitStrategy(GitStrategyType);
+            var tags = tagsCommand.GetResultAsync().Result;
             Dispatcher.UIThread.Invoke(() =>
             {
                 Tags = tags;
@@ -1272,8 +1286,10 @@ namespace SourceGit.ViewModels
             else
                 builder.Append(filters);
 
-            var commits = new Commands.QueryCommits(_fullpath, builder.ToString()).GetResultAsync().Result;
-            var graph = Models.CommitGraph.Parse(commits, _settings.HistoryShowFlags.HasFlag(Models.HistoryShowFlags.FirstParentOnly));
+            var queryCommand = new Commands.QueryCommits(_fullpath, builder.ToString()).WithGitStrategy(GitStrategyType);
+            var commits = queryCommand.GetResultAsync().Result;
+            var graph = Models.CommitGraph.Parse(commits,
+                _settings.HistoryShowFlags.HasFlag(Models.HistoryShowFlags.FirstParentOnly));
 
             Dispatcher.UIThread.Invoke(() =>
             {
@@ -1309,7 +1325,8 @@ namespace SourceGit.ViewModels
                 return;
             }
 
-            var submodules = new Commands.QuerySubmodules(_fullpath).GetResultAsync().Result;
+            var submodulesCommand = new Commands.QuerySubmodules(_fullpath).WithGitStrategy(GitStrategyType);
+            var submodules = submodulesCommand.GetResultAsync().Result;
             _watcher?.SetSubmodules(submodules);
 
             Dispatcher.UIThread.Invoke(() =>
@@ -1352,7 +1369,10 @@ namespace SourceGit.ViewModels
             if (IsBare)
                 return;
 
-            var changes = new Commands.QueryLocalChanges(_fullpath, _settings.IncludeUntrackedInLocalChanges).GetResultAsync().Result;
+            var localChangesCommand =
+                new Commands.QueryLocalChanges(_fullpath, _settings.IncludeUntrackedInLocalChanges).WithGitStrategy(GitStrategyType);
+            var changes = localChangesCommand.GetResultAsync().Result;
+
             if (_workingCopy == null)
                 return;
 
@@ -1372,7 +1392,8 @@ namespace SourceGit.ViewModels
             if (IsBare)
                 return;
 
-            var stashes = new Commands.QueryStashes(_fullpath).GetResultAsync().Result;
+            var queryStashesCommand = new Commands.QueryStashes(_fullpath).WithGitStrategy(GitStrategyType);
+            var stashes = queryStashesCommand.GetResultAsync().Result;
             Dispatcher.UIThread.Invoke(() =>
             {
                 if (_stashesPage != null)
@@ -1454,9 +1475,9 @@ namespace SourceGit.ViewModels
             {
                 SelectedSearchedCommit = null;
 
-                var target = await new Commands.QuerySingleCommit(_fullpath, branch.Head).GetResultAsync();
+                var target = await new Commands.QuerySingleCommit(_fullpath, branch.Head).WithGitStrategy(GitStrategyType).GetResultAsync();
                 _histories.AutoSelectedCommit = null;
-                _histories.DetailContext = new RevisionCompare(_fullpath, target, null);
+                _histories.DetailContext = new RevisionCompare(_fullpath, target, null, gitStrategyType: GitStrategyType);
             }
         }
 
@@ -1530,13 +1551,13 @@ namespace SourceGit.ViewModels
             var normalizedPath = root.Replace('\\', '/').TrimEnd('/');
 
             var node = Preferences.Instance.FindNode(normalizedPath) ??
-                new RepositoryNode
-                {
-                    Id = normalizedPath,
-                    Name = Path.GetFileName(normalizedPath),
-                    Bookmark = selfPage.Node.Bookmark,
-                    IsRepository = true,
-                };
+                       new RepositoryNode
+                       {
+                           Id = normalizedPath,
+                           Name = Path.GetFileName(normalizedPath),
+                           Bookmark = selfPage.Node.Bookmark,
+                           IsRepository = true,
+                       };
 
             App.GetLauncher().OpenRepositoryInTab(node, null);
         }
@@ -1556,13 +1577,13 @@ namespace SourceGit.ViewModels
         public void OpenWorktree(Models.Worktree worktree)
         {
             var node = Preferences.Instance.FindNode(worktree.FullPath) ??
-                new RepositoryNode
-                {
-                    Id = worktree.FullPath,
-                    Name = Path.GetFileName(worktree.FullPath),
-                    Bookmark = 0,
-                    IsRepository = true,
-                };
+                       new RepositoryNode
+                       {
+                           Id = worktree.FullPath,
+                           Name = Path.GetFileName(worktree.FullPath),
+                           Bookmark = 0,
+                           IsRepository = true,
+                       };
 
             App.GetLauncher().OpenRepositoryInTab(node, null);
         }
@@ -1625,7 +1646,27 @@ namespace SourceGit.ViewModels
 
         public async Task<bool> SaveCommitAsPatchAsync(Models.Commit commit, string folder, int index = 0)
         {
-            var ignore_chars = new HashSet<char> { '/', '\\', ':', ',', '*', '?', '\"', '<', '>', '|', '`', '$', '^', '%', '[', ']', '+', '-' };
+            var ignore_chars = new HashSet<char>
+            {
+                '/',
+                '\\',
+                ':',
+                ',',
+                '*',
+                '?',
+                '\"',
+                '<',
+                '>',
+                '|',
+                '`',
+                '$',
+                '^',
+                '%',
+                '[',
+                ']',
+                '+',
+                '-'
+            };
             var builder = new StringBuilder();
             builder.Append(index.ToString("D4"));
             builder.Append('-');
@@ -1647,6 +1688,7 @@ namespace SourceGit.ViewModels
                         break;
                 }
             }
+
             builder.Append(".patch");
 
             var saveTo = Path.Combine(folder, builder.ToString());
@@ -1674,7 +1716,7 @@ namespace SourceGit.ViewModels
         private Commands.IssueTracker CreateIssueTrackerCommand(bool shared)
         {
             var storage = shared ? $"{_fullpath}/.issuetracker" : $"{_gitDir}/sourcegit.issuetracker";
-            return new Commands.IssueTracker(_fullpath, storage);
+            return new Commands.IssueTracker(_fullpath, storage).WithGitStrategy(GitStrategyType);
         }
 
         private BranchTreeNode.Builder BuildBranchTree(List<Models.Branch> branches, List<Models.Remote> remotes)
@@ -1781,7 +1823,8 @@ namespace SourceGit.ViewModels
             Task.Run(RefreshCommits);
         }
 
-        private void UpdateBranchTreeFilterMode(List<BranchTreeNode> nodes, Dictionary<string, Models.FilterMode> filters)
+        private void UpdateBranchTreeFilterMode(List<BranchTreeNode> nodes,
+            Dictionary<string, Models.FilterMode> filters)
         {
             foreach (var node in nodes)
             {
@@ -1857,7 +1900,9 @@ namespace SourceGit.ViewModels
 
             Task.Run(async () =>
             {
-                _worktreeFiles = await new Commands.QueryRevisionFileNames(_fullpath, "HEAD")
+                var revisionFileNamesCommand = new Commands.QueryRevisionFileNames(_fullpath, "HEAD").WithGitStrategy(GitStrategyType);
+
+                _worktreeFiles = await revisionFileNamesCommand
                     .GetResultAsync()
                     .ConfigureAwait(false);
 
@@ -1882,7 +1927,8 @@ namespace SourceGit.ViewModels
             var matched = new List<string>();
             foreach (var file in _worktreeFiles)
             {
-                if (file.Contains(_searchCommitFilter, StringComparison.OrdinalIgnoreCase) && file.Length != _searchCommitFilter.Length)
+                if (file.Contains(_searchCommitFilter, StringComparison.OrdinalIgnoreCase) &&
+                    file.Length != _searchCommitFilter.Length)
                 {
                     matched.Add(file);
                     if (matched.Count > 100)
@@ -1918,7 +1964,11 @@ namespace SourceGit.ViewModels
 
                 Dispatcher.UIThread.Invoke(() => IsAutoFetching = true);
                 foreach (var remote in remotes)
-                    await new Commands.Fetch(_fullpath, remote, false, false) { RaiseError = false }.RunAsync();
+                {
+                    var fetchCommand = new Commands.Fetch(_fullpath, remote, false, false) { RaiseError = false }.WithGitStrategy(GitStrategyType);
+                    await fetchCommand.RunAsync();
+                }
+
                 _lastFetchTime = DateTime.Now;
                 Dispatcher.UIThread.Invoke(() => IsAutoFetching = false);
             }
@@ -1926,6 +1976,11 @@ namespace SourceGit.ViewModels
             {
                 // DO nothing, but prevent `System.AggregateException`
             }
+        }
+
+        private bool IsRemoteRepositoryStrategy()
+        {
+            return RepositoryStrategy.GetType() == typeof(RemoteRepositoryStrategy);
         }
 
         private string _fullpath = string.Empty;

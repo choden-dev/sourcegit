@@ -1,10 +1,10 @@
 using System;
 using System.IO;
-
 using Avalonia.Collections;
 using Avalonia.Threading;
-
 using CommunityToolkit.Mvvm.ComponentModel;
+using SourceGit.Utils;
+using GC = System.GC;
 
 namespace SourceGit.ViewModels
 {
@@ -65,13 +65,13 @@ namespace SourceGit.ViewModels
                 foreach (var repo in repos)
                 {
                     var node = pref.FindNode(repo) ??
-                        new RepositoryNode
-                        {
-                            Id = repo,
-                            Name = Path.GetFileName(repo),
-                            Bookmark = 0,
-                            IsRepository = true,
-                        };
+                               new RepositoryNode
+                               {
+                                   Id = repo,
+                                   Name = Path.GetFileName(repo),
+                                   Bookmark = 0,
+                                   IsRepository = true,
+                               };
 
                     OpenRepositoryInTab(node, null);
                 }
@@ -176,13 +176,13 @@ namespace SourceGit.ViewModels
             foreach (var repo in repos)
             {
                 var node = pref.FindNode(repo) ??
-                    new RepositoryNode
-                    {
-                        Id = repo,
-                        Name = Path.GetFileName(repo),
-                        Bookmark = 0,
-                        IsRepository = true,
-                    };
+                           new RepositoryNode
+                           {
+                               Id = repo,
+                               Name = Path.GetFileName(repo),
+                               Bookmark = 0,
+                               IsRepository = true,
+                           };
 
                 OpenRepositoryInTab(node, null);
             }
@@ -225,6 +225,7 @@ namespace SourceGit.ViewModels
                 if (p.Data is Repository r)
                     ActiveWorkspace.Repositories.Add(r.FullPath);
             }
+
             ActiveWorkspace.ActiveIdx = ActiveWorkspace.Repositories.IndexOf(from.Node.Id);
 
             _ignoreIndexChange = false;
@@ -338,21 +339,27 @@ namespace SourceGit.ViewModels
                 }
             }
 
-            if (!Path.Exists(node.Id))
+            if (!Path.Exists(node.Id) && !node.IsRemoteRepository)
             {
                 App.RaiseException(node.Id, "Repository does NOT exist any more. Please remove it.");
                 return;
             }
 
-            var isBare = new Commands.IsBareRepository(node.Id).GetResultAsync().Result;
+            var isBareRepositoryCommand = new Commands.IsBareRepository(node.Id).WithGitStrategy(
+                node.IsRemoteRepository ?
+                    Utils.CommandExtensions.GitStrategyType.Remote :
+                    Utils.CommandExtensions.GitStrategyType.Local);
+
+            var isBare = isBareRepositoryCommand.GetResultAsync().Result;
             var gitDir = isBare ? node.Id : GetRepositoryGitDir(node.Id);
-            if (string.IsNullOrEmpty(gitDir))
+            // TODO: Handle remote repositories properly.
+            if (string.IsNullOrEmpty(gitDir) && !node.IsRemoteRepository)
             {
                 App.RaiseException(node.Id, "Given path is not a valid git repository!");
                 return;
             }
 
-            var repo = new Repository(isBare, node.Id, gitDir);
+            var repo = new Repository(isBare, node.Id, gitDir, node.IsRemoteRepository);
             repo.Open();
 
             if (page == null)
@@ -399,11 +406,7 @@ namespace SourceGit.ViewModels
                 return;
             }
 
-            var notification = new Models.Notification()
-            {
-                IsError = isError,
-                Message = message,
-            };
+            var notification = new Models.Notification() { IsError = isError, Message = message, };
 
             foreach (var page in Pages)
             {
@@ -418,7 +421,7 @@ namespace SourceGit.ViewModels
             _activePage?.Notifications.Add(notification);
         }
 
-        private string GetRepositoryGitDir(string repo)
+        private string GetRepositoryGitDir(string repo, bool isRemoteRepo = false)
         {
             var fullpath = Path.Combine(repo, ".git");
             if (Directory.Exists(fullpath))
