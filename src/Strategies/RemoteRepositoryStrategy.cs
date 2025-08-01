@@ -11,11 +11,6 @@ namespace SourceGit.Strategies
             throw new System.NotImplementedException();
         }
 
-        public void InitializeComponents(Repository repository)
-        {
-            throw new System.NotImplementedException();
-        }
-
         public RepositorySettings LoadSettings(Repository repository)
         {
             // TODO: Implement loading settings for remote repositories.
@@ -25,16 +20,6 @@ namespace SourceGit.Strategies
         public Watcher SetupWatcher(Repository repository)
         {
             return new Watcher(repository, repository.FullPath, string.Empty, true);
-        }
-
-        public void InitializeViews(Repository repository)
-        {
-            throw new System.NotImplementedException();
-        }
-
-        public Task RefreshRepository(Repository repository)
-        {
-            throw new System.NotImplementedException();
         }
     }
 }

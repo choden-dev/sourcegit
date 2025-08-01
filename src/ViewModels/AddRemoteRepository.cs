@@ -101,7 +101,8 @@ namespace SourceGit.ViewModels
 
             if (success)
             {
-                Preferences.Instance.FindOrAddNodeByRepositoryPath(_workingDirectory, null, true, isRemoteRepository: true, name: _hostName);
+                // Tech debt: is node the right place to store this?
+                Preferences.Instance.FindOrAddNodeByRepositoryPath(_hostName, null, true, isRemoteRepository: true, name: _workingDirectory);
                 Welcome.Instance.Refresh();
             }
 

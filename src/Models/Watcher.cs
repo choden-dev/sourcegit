@@ -17,8 +17,20 @@ namespace SourceGit.Models
             {
                 SetupLocalWatcher(fullpath, gitDir);
             }
+            else
+            {
+                SetupRemoteWatcher();
+            }
 
             _timer = new Timer(Tick, null, 100, 100);
+        }
+
+        private SshPoller _poller;
+        private void SetupRemoteWatcher()
+        {
+            // For remote repositories, we don't need to set up file watchers.
+            // Instead, we will rely on polling the remote repository.
+            _poller = new SshPoller(_repo);
         }
 
         private void SetupLocalWatcher(string fullpath, string gitDir)
@@ -117,6 +129,7 @@ namespace SourceGit.Models
                 watcher.Dispose();
             }
 
+            _poller?.Dispose();
             _watchers.Clear();
             _timer.Dispose();
             _timer = null;

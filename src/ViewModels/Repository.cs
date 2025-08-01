@@ -518,15 +518,21 @@ namespace SourceGit.ViewModels
             get;
         } = false;
 
+        public string HostName
+        {
+            get;
+        } = null;
 
-        public Repository(bool isBare, string path, string gitDir, bool isRemoteRepository)
+        public Repository(bool isBare, string path, string gitDir, bool isRemoteRepository, string hostName= null)
         {
             IsBare = isBare;
             FullPath = path;
             GitDir = gitDir;
             if (isRemoteRepository)
             {
+                IsRemoteRepository = true;
                 RepositoryStrategy = new RemoteRepositoryStrategy();
+                HostName = hostName;
             }
 
             GitStrategyType = isRemoteRepository ?
@@ -1230,6 +1236,10 @@ namespace SourceGit.ViewModels
 
         public void RefreshWorktrees()
         {
+            if (IsRemoteRepository)
+            {
+                return;
+            }
             var worktreeCommand = new Commands.Worktree(_fullpath).WithGitStrategy(GitStrategyType);
             var worktrees = worktreeCommand.ReadAllAsync().Result;
             var cleaned = new List<Models.Worktree>();
@@ -1366,6 +1376,9 @@ namespace SourceGit.ViewModels
 
         public void RefreshWorkingCopyChanges()
         {
+            // TODO: we can't handle paths yet
+            if (GitStrategyType == Utils.CommandExtensions.GitStrategyType.Remote) return;
+
             if (IsBare)
                 return;
 
@@ -1377,6 +1390,7 @@ namespace SourceGit.ViewModels
                 return;
 
             changes.Sort((l, r) => Models.NumericSort.Compare(l.Path, r.Path));
+
             _workingCopy.SetData(changes);
 
             Dispatcher.UIThread.Invoke(() =>

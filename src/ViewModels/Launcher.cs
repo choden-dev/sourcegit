@@ -37,8 +37,17 @@ namespace SourceGit.ViewModels
                 {
                     UpdateTitle();
 
+
                     if (!_ignoreIndexChange && value is { Data: Repository repo })
+                    {
+                        if (repo.IsRemoteRepository)
+                        {
+                            var node = Preferences.Instance.FindNode(repo.HostName);
+                            Preferences.Instance.AddNodeMapping("current", repo.HostName, node.Name);
+                        }
+
                         _activeWorkspace.ActiveIdx = _activeWorkspace.Repositories.IndexOf(repo.FullPath);
+                    }
                 }
             }
         }
@@ -67,10 +76,7 @@ namespace SourceGit.ViewModels
                     var node = pref.FindNode(repo) ??
                                new RepositoryNode
                                {
-                                   Id = repo,
-                                   Name = Path.GetFileName(repo),
-                                   Bookmark = 0,
-                                   IsRepository = true,
+                                   Id = repo, Name = Path.GetFileName(repo), Bookmark = 0, IsRepository = true,
                                };
 
                     OpenRepositoryInTab(node, null);
@@ -94,13 +100,13 @@ namespace SourceGit.ViewModels
                 foreach (var w in pref.Workspaces)
                     w.IsActive = false;
 
-                var test = new Commands.QueryRepositoryRootPath(startupRepo).GetResultAsync().Result;
+                var test = new Commands.QueryRepositoryRootPath(startupRepo)
+                    .GetResultAsync().Result;
                 if (!test.IsSuccess || string.IsNullOrEmpty(test.StdOut))
                 {
                     Pages[0].Notifications.Add(new Models.Notification
                     {
-                        IsError = true,
-                        Message = $"Given path: '{startupRepo}' is NOT a valid repository!"
+                        IsError = true, Message = $"Given path: '{startupRepo}' is NOT a valid repository!"
                     });
                 }
                 else
@@ -178,10 +184,7 @@ namespace SourceGit.ViewModels
                 var node = pref.FindNode(repo) ??
                            new RepositoryNode
                            {
-                               Id = repo,
-                               Name = Path.GetFileName(repo),
-                               Bookmark = 0,
-                               IsRepository = true,
+                               Id = repo, Name = Path.GetFileName(repo), Bookmark = 0, IsRepository = true,
                            };
 
                 OpenRepositoryInTab(node, null);
@@ -359,7 +362,9 @@ namespace SourceGit.ViewModels
                 return;
             }
 
-            var repo = new Repository(isBare, node.Id, gitDir, node.IsRemoteRepository);
+            var repo = new Repository(isBare, node.Id, gitDir, node.IsRemoteRepository, hostName: node.Id);
+            // Tech debt: the host name and directory should not be done like this...
+            Preferences.Instance.AddNodeMapping("current", node.Id, node.Name);
             repo.Open();
 
             if (page == null)
@@ -476,6 +481,13 @@ namespace SourceGit.ViewModels
                 var node = _activePage.Node;
                 var name = node.Name;
                 var path = node.Id;
+
+                if(_activePage.Data is Repository { IsRemoteRepository: true })
+                {
+                    // The host name
+                    Title = path;
+                    return;
+                }
 
                 if (!OperatingSystem.IsWindows())
                 {

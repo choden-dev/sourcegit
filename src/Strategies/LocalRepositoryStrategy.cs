@@ -1,7 +1,6 @@
 using System;
 using System.IO;
 using System.Text.Json;
-using System.Threading.Tasks;
 using SourceGit.Models;
 using SourceGit.ViewModels;
 
@@ -12,11 +11,6 @@ namespace SourceGit.Strategies
         public void OpenRepository(Repository repository)
         {
 
-        }
-
-        public void InitializeComponents(Repository repository)
-        {
-            throw new System.NotImplementedException();
         }
 
         public RepositorySettings LoadSettings(Repository repository)
@@ -58,16 +52,6 @@ namespace SourceGit.Strategies
                 App.RaiseException(string.Empty, $"Failed to start watcher for repository: '{repository.FullPath}'. You may need to press 'F5' to refresh repository manually!\n\nReason: {ex.Message}");
                 return null;
             }
-        }
-
-        public void InitializeViews(Repository repository)
-        {
-            throw new System.NotImplementedException();
-        }
-
-        public Task RefreshRepository(Repository repository)
-        {
-            throw new System.NotImplementedException();
         }
     }
 }
