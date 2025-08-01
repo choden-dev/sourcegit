@@ -184,7 +184,7 @@ namespace SourceGit.ViewModels
 
                 var end = commits[0] as Models.Commit;
                 var start = commits[1] as Models.Commit;
-                DetailContext = new RevisionCompare(_repo.FullPath, start, end);
+                DetailContext = new RevisionCompare(_repo.FullPath, start, end, gitStrategyType: _repo.GitStrategyType);
             }
             else
             {
@@ -361,7 +361,7 @@ namespace SourceGit.ViewModels
                 _repo.SelectedSearchedCommit = null;
                 head = await new Commands.QuerySingleCommit(_repo.FullPath, "HEAD").GetResultAsync();
                 if (head != null)
-                    DetailContext = new RevisionCompare(_repo.FullPath, commit, head);
+                    DetailContext = new RevisionCompare(_repo.FullPath, commit, head, gitStrategyType: _repo.GitStrategyType);
 
                 return null;
             }
@@ -371,7 +371,7 @@ namespace SourceGit.ViewModels
 
         public void CompareWithWorktree(Models.Commit commit)
         {
-            DetailContext = new RevisionCompare(_repo.FullPath, commit, null);
+            DetailContext = new RevisionCompare(_repo.FullPath, commit, null, gitStrategyType: _repo.GitStrategyType);
         }
 
         private void NavigateTo(Models.Commit commit)

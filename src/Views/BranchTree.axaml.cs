@@ -732,7 +732,7 @@ namespace SourceGit.Views
                 compareWithCurrent.Icon = App.CreateMenuIcon("Icons.Compare");
                 compareWithCurrent.Click += (_, _) =>
                 {
-                    App.ShowWindow(new ViewModels.BranchCompare(repo.FullPath, branch, current));
+                    App.ShowWindow(new ViewModels.BranchCompare(repo.FullPath, branch, current, repo.GitStrategyType));
                 };
                 menu.Items.Add(new MenuItem() { Header = "-" });
                 menu.Items.Add(compareWithCurrent);
@@ -1005,7 +1005,7 @@ namespace SourceGit.Views
                 compareWithHead.Icon = App.CreateMenuIcon("Icons.Compare");
                 compareWithHead.Click += (_, _) =>
                 {
-                    App.ShowWindow(new ViewModels.BranchCompare(repo.FullPath, branch, current));
+                    App.ShowWindow(new ViewModels.BranchCompare(repo.FullPath, branch, current, repo.GitStrategyType));
                 };
                 menu.Items.Add(compareWithHead);
             }

@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
+using SourceGit.Utils;
 
 namespace SourceGit.Commands
 {
@@ -10,7 +11,9 @@ namespace SourceGit.Commands
         /// <summary>
         ///     Discard all local changes (unstaged & staged)
         /// </summary>
-        public static async Task AllAsync(string repo, bool includeUntracked, bool includeIgnored, Models.ICommandLog log)
+        public static async Task AllAsync(string repo, bool includeUntracked, bool includeIgnored,
+            Models.ICommandLog log,
+            Utils.CommandExtensions.GitStrategyType gitStrategyType = Utils.CommandExtensions.GitStrategyType.Local)
         {
             if (includeUntracked)
             {
@@ -39,14 +42,16 @@ namespace SourceGit.Commands
                 if (includeIgnored)
                     await new Clean(repo, Models.CleanMode.All).Use(log).ExecAsync().ConfigureAwait(false);
                 else
-                    await new Clean(repo, Models.CleanMode.OnlyUntrackedFiles).Use(log).ExecAsync().ConfigureAwait(false);
+                    await new Clean(repo, Models.CleanMode.OnlyUntrackedFiles).Use(log).ExecAsync()
+                        .ConfigureAwait(false);
             }
             else if (includeIgnored)
             {
                 await new Clean(repo, Models.CleanMode.OnlyIgnoredFiles).Use(log).ExecAsync().ConfigureAwait(false);
             }
 
-            await new Reset(repo, "HEAD", "--hard").Use(log).ExecAsync().ConfigureAwait(false);
+            await new Reset(repo, "HEAD", "--hard")
+                .WithGitStrategy(gitStrategyType).Use(log).ExecAsync().ConfigureAwait(false);
         }
 
         /// <summary>
@@ -55,7 +60,8 @@ namespace SourceGit.Commands
         /// <param name="repo"></param>
         /// <param name="changes"></param>
         /// <param name="log"></param>
-        public static async Task ChangesAsync(string repo, List<Models.Change> changes, Models.ICommandLog log)
+        public static async Task ChangesAsync(string repo, List<Models.Change> changes, Models.ICommandLog log,
+            Utils.CommandExtensions.GitStrategyType gitStrategyType = Utils.CommandExtensions.GitStrategyType.Local)
         {
             var restores = new List<string>();
 
@@ -86,7 +92,9 @@ namespace SourceGit.Commands
             {
                 var pathSpecFile = Path.GetTempFileName();
                 await File.WriteAllLinesAsync(pathSpecFile, restores).ConfigureAwait(false);
-                await new Restore(repo, pathSpecFile, false).Use(log).ExecAsync().ConfigureAwait(false);
+                await new Restore(repo, pathSpecFile, false).Use(log)
+                    .WithGitStrategy(gitStrategyType)
+                    .ExecAsync().ConfigureAwait(false);
                 File.Delete(pathSpecFile);
             }
         }
