@@ -523,7 +523,7 @@ namespace SourceGit.ViewModels
             get;
         } = null;
 
-        public Repository(bool isBare, string path, string gitDir, bool isRemoteRepository, string hostName= null)
+        public Repository(bool isBare, string path, string gitDir, bool isRemoteRepository, string hostName = null)
         {
             IsBare = isBare;
             FullPath = path;
@@ -1377,7 +1377,8 @@ namespace SourceGit.ViewModels
         public void RefreshWorkingCopyChanges()
         {
             // TODO: we can't handle paths yet
-            if (GitStrategyType == Utils.CommandExtensions.GitStrategyType.Remote) return;
+            if (GitStrategyType == Utils.CommandExtensions.GitStrategyType.Remote)
+                return;
 
             if (IsBare)
                 return;

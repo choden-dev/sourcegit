@@ -104,7 +104,7 @@ namespace SourceGit.ViewModels
 
         public Models.BisectState UpdateBisectInfo()
         {
-            if(_repo.GitStrategyType == Utils.CommandExtensions.GitStrategyType.Remote)
+            if (_repo.GitStrategyType == Utils.CommandExtensions.GitStrategyType.Remote)
             {
                 // Remote repositories do not support paths yet.
                 Bisect = null;

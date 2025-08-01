@@ -76,7 +76,10 @@ namespace SourceGit.ViewModels
                     var node = pref.FindNode(repo) ??
                                new RepositoryNode
                                {
-                                   Id = repo, Name = Path.GetFileName(repo), Bookmark = 0, IsRepository = true,
+                                   Id = repo,
+                                   Name = Path.GetFileName(repo),
+                                   Bookmark = 0,
+                                   IsRepository = true,
                                };
 
                     OpenRepositoryInTab(node, null);
@@ -106,7 +109,8 @@ namespace SourceGit.ViewModels
                 {
                     Pages[0].Notifications.Add(new Models.Notification
                     {
-                        IsError = true, Message = $"Given path: '{startupRepo}' is NOT a valid repository!"
+                        IsError = true,
+                        Message = $"Given path: '{startupRepo}' is NOT a valid repository!"
                     });
                 }
                 else
@@ -184,7 +188,10 @@ namespace SourceGit.ViewModels
                 var node = pref.FindNode(repo) ??
                            new RepositoryNode
                            {
-                               Id = repo, Name = Path.GetFileName(repo), Bookmark = 0, IsRepository = true,
+                               Id = repo,
+                               Name = Path.GetFileName(repo),
+                               Bookmark = 0,
+                               IsRepository = true,
                            };
 
                 OpenRepositoryInTab(node, null);
@@ -482,7 +489,7 @@ namespace SourceGit.ViewModels
                 var name = node.Name;
                 var path = node.Id;
 
-                if(_activePage.Data is Repository { IsRemoteRepository: true })
+                if (_activePage.Data is Repository { IsRemoteRepository: true })
                 {
                     // The host name
                     Title = path;

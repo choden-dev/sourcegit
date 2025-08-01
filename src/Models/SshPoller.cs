@@ -1,6 +1,5 @@
 using System;
 using System.Threading;
-using SourceGit.ViewModels;
 
 namespace SourceGit.Models
 {

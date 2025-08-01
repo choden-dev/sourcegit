@@ -1,4 +1,3 @@
-using System.Threading.Tasks;
 using SourceGit.Models;
 using SourceGit.ViewModels;
 
