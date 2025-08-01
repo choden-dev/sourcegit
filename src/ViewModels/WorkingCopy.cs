@@ -755,7 +755,7 @@ namespace SourceGit.ViewModels
             else if (change.IsConflicted)
                 DetailContext = new Conflict(_repo, this, change);
             else
-                DetailContext = new DiffContext(_repo.FullPath, new Models.DiffOption(change, isUnstaged), _detailContext as DiffContext);
+                DetailContext = new DiffContext(_repo.FullPath, new Models.DiffOption(change, isUnstaged), _detailContext as DiffContext, gitStrategy: _repo.GitStrategyType);
         }
 
         private void DoCommit(bool autoStage, bool autoPush, CommitCheckPassed checkPassed = CommitCheckPassed.None)

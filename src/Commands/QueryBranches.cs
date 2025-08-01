@@ -15,7 +15,7 @@ namespace SourceGit.Commands
         {
             WorkingDirectory = repo;
             Context = repo;
-            Args = "branch -l --all -v --format=\"%(refname)%00%(committerdate:unix)%00%(objectname)%00%(HEAD)%00%(upstream)%00%(upstream:trackshort)\"";
+            Args = "branch -l --all -v --format=\\%\\(refname\\)\\%00\\%\\(committerdate:unix\\)\\%00\\%\\(objectname\\)\\%00\\%\\(HEAD\\)\\%00\\%\\(upstream\\)\\%00\\%\\(upstream:trackshort\\)";
         }
 
         public async Task<List<Models.Branch>> GetResultAsync()

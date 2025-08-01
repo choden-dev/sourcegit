@@ -1,4 +1,5 @@
 ﻿using System.Threading.Tasks;
+using SourceGit.Utils;
 
 namespace SourceGit.ViewModels
 {
@@ -37,6 +38,7 @@ namespace SourceGit.ViewModels
             Use(log);
 
             var succ = await new Commands.Reset(_repo.FullPath, To.SHA, SelectedMode.Arg)
+                .WithGitStrategy(_repo.GitStrategyType)
                 .Use(log)
                 .ExecAsync();
 

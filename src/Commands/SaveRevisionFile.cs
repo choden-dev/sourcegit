@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 
 namespace SourceGit.Commands
 {
+    // TODO: handle for remote repos
     public static class SaveRevisionFile
     {
         public static async Task RunAsync(string repo, string revision, string file, string saveTo)

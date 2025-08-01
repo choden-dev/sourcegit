@@ -8,10 +8,33 @@ namespace SourceGit.Models
 {
     public class Watcher : IDisposable
     {
-        public Watcher(IRepository repo, string fullpath, string gitDir)
+        public Watcher(IRepository repo, string fullpath, string gitDir, bool isRemoteRepository = false)
         {
             _repo = repo;
 
+            // Don't bother tracking file changes for ssh repos because we have to poll the remote repository anyway.
+            if (!isRemoteRepository)
+            {
+                SetupLocalWatcher(fullpath, gitDir);
+            }
+            else
+            {
+                SetupRemoteWatcher();
+            }
+
+            _timer = new Timer(Tick, null, 100, 100);
+        }
+
+        private SshPoller _poller;
+        private void SetupRemoteWatcher()
+        {
+            // For remote repositories, we don't need to set up file watchers.
+            // Instead, we will rely on polling the remote repository.
+            _poller = new SshPoller(_repo);
+        }
+
+        private void SetupLocalWatcher(string fullpath, string gitDir)
+        {
             var testGitDir = new DirectoryInfo(Path.Combine(fullpath, ".git")).FullName;
             var desiredDir = new DirectoryInfo(gitDir).FullName;
             if (testGitDir.Equals(desiredDir, StringComparison.Ordinal))
@@ -19,7 +42,8 @@ namespace SourceGit.Models
                 var combined = new FileSystemWatcher();
                 combined.Path = fullpath;
                 combined.Filter = "*";
-                combined.NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.DirectoryName | NotifyFilters.FileName | NotifyFilters.Size | NotifyFilters.CreationTime;
+                combined.NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.DirectoryName | NotifyFilters.FileName |
+                                        NotifyFilters.Size | NotifyFilters.CreationTime;
                 combined.IncludeSubdirectories = true;
                 combined.Created += OnRepositoryChanged;
                 combined.Renamed += OnRepositoryChanged;
@@ -34,7 +58,8 @@ namespace SourceGit.Models
                 var wc = new FileSystemWatcher();
                 wc.Path = fullpath;
                 wc.Filter = "*";
-                wc.NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.DirectoryName | NotifyFilters.FileName | NotifyFilters.Size | NotifyFilters.CreationTime;
+                wc.NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.DirectoryName | NotifyFilters.FileName |
+                                  NotifyFilters.Size | NotifyFilters.CreationTime;
                 wc.IncludeSubdirectories = true;
                 wc.Created += OnWorkingCopyChanged;
                 wc.Renamed += OnWorkingCopyChanged;
@@ -56,8 +81,6 @@ namespace SourceGit.Models
                 _watchers.Add(wc);
                 _watchers.Add(git);
             }
-
-            _timer = new Timer(Tick, null, 100, 100);
         }
 
         public void SetEnabled(bool enabled)
@@ -106,6 +129,7 @@ namespace SourceGit.Models
                 watcher.Dispose();
             }
 
+            _poller?.Dispose();
             _watchers.Clear();
             _timer.Dispose();
             _timer = null;
@@ -221,7 +245,7 @@ namespace SourceGit.Models
                 }
             }
             else if (name.Equals("MERGE_HEAD", StringComparison.Ordinal) ||
-                name.Equals("AUTO_MERGE", StringComparison.Ordinal))
+                     name.Equals("AUTO_MERGE", StringComparison.Ordinal))
             {
                 if (_repo.MayHaveSubmodules())
                     _updateSubmodules = DateTime.Now.AddSeconds(1).ToFileTime();
@@ -235,14 +259,16 @@ namespace SourceGit.Models
                 _updateStashes = DateTime.Now.AddSeconds(.5).ToFileTime();
             }
             else if (name.Equals("HEAD", StringComparison.Ordinal) ||
-                name.Equals("BISECT_START", StringComparison.Ordinal) ||
-                name.StartsWith("refs/heads/", StringComparison.Ordinal) ||
-                name.StartsWith("refs/remotes/", StringComparison.Ordinal) ||
-                (name.StartsWith("worktrees/", StringComparison.Ordinal) && name.EndsWith("/HEAD", StringComparison.Ordinal)))
+                     name.Equals("BISECT_START", StringComparison.Ordinal) ||
+                     name.StartsWith("refs/heads/", StringComparison.Ordinal) ||
+                     name.StartsWith("refs/remotes/", StringComparison.Ordinal) ||
+                     (name.StartsWith("worktrees/", StringComparison.Ordinal) &&
+                      name.EndsWith("/HEAD", StringComparison.Ordinal)))
             {
                 _updateBranch = DateTime.Now.AddSeconds(.5).ToFileTime();
             }
-            else if (name.StartsWith("objects/", StringComparison.Ordinal) || name.Equals("index", StringComparison.Ordinal))
+            else if (name.StartsWith("objects/", StringComparison.Ordinal) ||
+                     name.Equals("index", StringComparison.Ordinal))
             {
                 _updateWC = DateTime.Now.AddSeconds(1).ToFileTime();
             }
@@ -276,7 +302,7 @@ namespace SourceGit.Models
         }
 
         private readonly IRepository _repo = null;
-        private List<FileSystemWatcher> _watchers = [];
+        private readonly List<FileSystemWatcher> _watchers = [];
         private Timer _timer = null;
         private int _lockCount = 0;
         private long _updateWC = 0;

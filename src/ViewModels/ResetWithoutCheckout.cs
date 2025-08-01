@@ -1,4 +1,5 @@
 ﻿using System.Threading.Tasks;
+using SourceGit.Utils;
 
 namespace SourceGit.ViewModels
 {
@@ -39,6 +40,7 @@ namespace SourceGit.ViewModels
             Use(log);
 
             var succ = await new Commands.Branch(_repo.FullPath, Target.Name)
+                .WithGitStrategy(_repo.GitStrategyType)
                 .Use(log)
                 .CreateAsync(_revision, true);
 

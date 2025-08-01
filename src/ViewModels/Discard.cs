@@ -71,9 +71,9 @@ namespace SourceGit.ViewModels
             Use(log);
 
             if (Mode is DiscardAllMode all)
-                await Commands.Discard.AllAsync(_repo.FullPath, all.IncludeUntracked, all.IncludeIgnored, log);
+                await Commands.Discard.AllAsync(_repo.FullPath, all.IncludeUntracked, all.IncludeIgnored, log, _repo.GitStrategyType);
             else
-                await Commands.Discard.ChangesAsync(_repo.FullPath, _changes, log);
+                await Commands.Discard.ChangesAsync(_repo.FullPath, _changes, log, _repo.GitStrategyType);
 
             log.Complete();
             _repo.MarkWorkingCopyDirtyManually();

@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
+using SourceGit.Utils;
 
 namespace SourceGit.ViewModels
 {
@@ -103,6 +104,13 @@ namespace SourceGit.ViewModels
 
         public Models.BisectState UpdateBisectInfo()
         {
+            if (_repo.GitStrategyType == Utils.CommandExtensions.GitStrategyType.Remote)
+            {
+                // Remote repositories do not support paths yet.
+                Bisect = null;
+                return Models.BisectState.None;
+            }
+
             var test = Path.Combine(_repo.GitDir, "BISECT_START");
             if (!File.Exists(test))
             {
@@ -144,6 +152,7 @@ namespace SourceGit.ViewModels
             Task.Run(async () =>
             {
                 var c = await new Commands.QuerySingleCommit(_repo.FullPath, commitSHA)
+                    .WithGitStrategy(_repo.GitStrategyType)
                     .GetResultAsync()
                     .ConfigureAwait(false);
 
@@ -184,7 +193,7 @@ namespace SourceGit.ViewModels
 
                 var end = commits[0] as Models.Commit;
                 var start = commits[1] as Models.Commit;
-                DetailContext = new RevisionCompare(_repo.FullPath, start, end);
+                DetailContext = new RevisionCompare(_repo.FullPath, start, end, gitStrategyType: _repo.GitStrategyType);
             }
             else
             {
@@ -300,7 +309,9 @@ namespace SourceGit.ViewModels
                     {
                         var parent = _commits.Find(x => x.SHA == sha);
                         if (parent == null)
-                            parent = await new Commands.QuerySingleCommit(_repo.FullPath, sha).GetResultAsync();
+                            parent = await new Commands.QuerySingleCommit(_repo.FullPath, sha)
+                                .WithGitStrategy(_repo.GitStrategyType)
+                                .GetResultAsync();
 
                         if (parent != null)
                             parents.Add(parent);
@@ -315,7 +326,9 @@ namespace SourceGit.ViewModels
         {
             if (_repo.CanCreatePopup())
             {
-                var message = await new Commands.QueryCommitFullMessage(_repo.FullPath, head.SHA).GetResultAsync();
+                var message = await new Commands.QueryCommitFullMessage(_repo.FullPath, head.SHA)
+                    .WithGitStrategy(_repo.GitStrategyType)
+                    .GetResultAsync();
                 _repo.ShowPopup(new Reword(_repo, head, message));
             }
         }
@@ -324,7 +337,9 @@ namespace SourceGit.ViewModels
         {
             if (head.Parents.Count == 1)
             {
-                var message = await new Commands.QueryCommitFullMessage(_repo.FullPath, head.SHA).GetResultAsync();
+                var message = await new Commands.QueryCommitFullMessage(_repo.FullPath, head.SHA)
+                    .WithGitStrategy(_repo.GitStrategyType)
+                    .GetResultAsync();
                 var parent = _commits.Find(x => x.SHA.Equals(head.Parents[0]));
                 if (parent != null && _repo.CanCreatePopup())
                     _repo.ShowPopup(new Squash(_repo, parent, message));
@@ -340,7 +355,9 @@ namespace SourceGit.ViewModels
                 _ => $"{commit.SHA}~",
             };
 
-            var on = await new Commands.QuerySingleCommit(_repo.FullPath, start).GetResultAsync();
+            var on = await new Commands.QuerySingleCommit(_repo.FullPath, start)
+                .WithGitStrategy(_repo.GitStrategyType)
+                .GetResultAsync();
             if (on == null)
                 App.RaiseException(_repo.FullPath, $"Can not squash current commit into parent!");
             else
@@ -349,7 +366,9 @@ namespace SourceGit.ViewModels
 
         public async Task CopyCommitFullMessageAsync(Models.Commit commit)
         {
-            var message = await new Commands.QueryCommitFullMessage(_repo.FullPath, commit.SHA).GetResultAsync();
+            var message = await new Commands.QueryCommitFullMessage(_repo.FullPath, commit.SHA)
+                .WithGitStrategy(_repo.GitStrategyType)
+                .GetResultAsync();
             await App.CopyTextAsync(message);
         }
 
@@ -359,9 +378,11 @@ namespace SourceGit.ViewModels
             if (head == null)
             {
                 _repo.SelectedSearchedCommit = null;
-                head = await new Commands.QuerySingleCommit(_repo.FullPath, "HEAD").GetResultAsync();
+                head = await new Commands.QuerySingleCommit(_repo.FullPath, "HEAD")
+                    .WithGitStrategy(_repo.GitStrategyType)
+                    .GetResultAsync();
                 if (head != null)
-                    DetailContext = new RevisionCompare(_repo.FullPath, commit, head);
+                    DetailContext = new RevisionCompare(_repo.FullPath, commit, head, gitStrategyType: _repo.GitStrategyType);
 
                 return null;
             }
@@ -371,7 +392,7 @@ namespace SourceGit.ViewModels
 
         public void CompareWithWorktree(Models.Commit commit)
         {
-            DetailContext = new RevisionCompare(_repo.FullPath, commit, null);
+            DetailContext = new RevisionCompare(_repo.FullPath, commit, null, gitStrategyType: _repo.GitStrategyType);
         }
 
         private void NavigateTo(Models.Commit commit)

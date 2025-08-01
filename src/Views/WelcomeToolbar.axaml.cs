@@ -14,6 +14,29 @@ namespace SourceGit.Views
             InitializeComponent();
         }
 
+        private async void OpenRemoteRepository(object _1, RoutedEventArgs e)
+        {
+            var activePage = App.GetLauncher().ActivePage;
+            if (activePage == null || !activePage.CanCreatePopup())
+                return;
+
+            var topLevel = TopLevel.GetTopLevel(this);
+            if (topLevel == null)
+                return;
+
+            try
+            {
+                if (activePage.CanCreatePopup())
+                {
+                    activePage.Popup = new ViewModels.AddRemoteRepository();
+                }
+            }
+            catch (Exception exception)
+            {
+                App.RaiseException(string.Empty, $"Failed to open repository: {exception.Message}");
+            }
+            e.Handled = true;
+        }
         private async void OpenLocalRepository(object _1, RoutedEventArgs e)
         {
             var activePage = App.GetLauncher().ActivePage;

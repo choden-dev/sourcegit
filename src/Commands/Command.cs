@@ -1,15 +1,23 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using SourceGit.Models;
 
 namespace SourceGit.Commands
 {
     public partial class Command
     {
+        public IGitExecutionStrategy ExecutionStrategy { get; set; }
+
+        public Command(IGitExecutionStrategy strategy = null)
+        {
+            strategy ??= new LocalGitExecutionStrategy(this);
+            ExecutionStrategy = strategy;
+        }
+
         public class Result
         {
             public bool IsSuccess { get; set; } = false;
@@ -29,6 +37,7 @@ namespace SourceGit.Commands
         public string Context { get; set; } = string.Empty;
         public string WorkingDirectory { get; set; } = null;
         public EditorType Editor { get; set; } = EditorType.CoreEditor;
+
         public string SSHKey { get; set; } = string.Empty;
         public string Args { get; set; } = string.Empty;
 
@@ -37,11 +46,24 @@ namespace SourceGit.Commands
         public bool RaiseError { get; set; } = true;
         public Models.ICommandLog Log { get; set; } = null;
 
+        public string RemoteDirectory
+        {
+            get;
+            set;
+        }
+
+        public string RemoteHost
+        {
+            get;
+            set;
+        }
+
         public void Exec()
         {
+            RemoveWorkingDirectoryIfRemote();
             try
             {
-                var start = CreateGitStartInfo(false);
+                var start = ExecutionStrategy.CreateGitStartInfo(new CommandStartInfoOptions { Redirect = true });
                 Process.Start(start);
             }
             catch (Exception ex)
@@ -54,10 +76,17 @@ namespace SourceGit.Commands
         {
             Log?.AppendLine($"$ git {Args}\n");
 
+            RemoveWorkingDirectoryIfRemote();
+
             var errs = new List<string>();
 
             using var proc = new Process();
-            proc.StartInfo = CreateGitStartInfo(true);
+            proc.StartInfo = ExecutionStrategy.CreateGitStartInfo(new CommandStartInfoOptions
+            {
+                Redirect = true,
+                RemoteDirectory = RemoteDirectory,
+                RemoteHost = RemoteHost
+            });
             proc.OutputDataReceived += (_, e) => HandleOutput(e.Data, errs);
             proc.ErrorDataReceived += (_, e) => HandleOutput(e.Data, errs);
 
@@ -129,7 +158,16 @@ namespace SourceGit.Commands
 
         protected async Task<Result> ReadToEndAsync()
         {
-            using var proc = new Process() { StartInfo = CreateGitStartInfo(true) };
+            RemoveWorkingDirectoryIfRemote();
+            using var proc = new Process()
+            {
+                StartInfo = ExecutionStrategy.CreateGitStartInfo(new CommandStartInfoOptions
+                {
+                    Redirect = true,
+                    RemoteDirectory = RemoteDirectory,
+                    RemoteHost = RemoteHost
+                })
+            };
 
             try
             {
@@ -147,67 +185,6 @@ namespace SourceGit.Commands
 
             rs.IsSuccess = proc.ExitCode == 0;
             return rs;
-        }
-
-        private ProcessStartInfo CreateGitStartInfo(bool redirect)
-        {
-            var start = new ProcessStartInfo();
-            start.FileName = Native.OS.GitExecutable;
-            start.UseShellExecute = false;
-            start.CreateNoWindow = true;
-
-            if (redirect)
-            {
-                start.RedirectStandardOutput = true;
-                start.RedirectStandardError = true;
-                start.StandardOutputEncoding = Encoding.UTF8;
-                start.StandardErrorEncoding = Encoding.UTF8;
-            }
-
-            // Force using this app as SSH askpass program
-            var selfExecFile = Process.GetCurrentProcess().MainModule!.FileName;
-            start.Environment.Add("SSH_ASKPASS", selfExecFile); // Can not use parameter here, because it invoked by SSH with `exec`
-            start.Environment.Add("SSH_ASKPASS_REQUIRE", "force");
-            start.Environment.Add("SOURCEGIT_LAUNCH_AS_ASKPASS", "TRUE");
-
-            // If an SSH private key was provided, sets the environment.
-            if (!start.Environment.ContainsKey("GIT_SSH_COMMAND") && !string.IsNullOrEmpty(SSHKey))
-                start.Environment.Add("GIT_SSH_COMMAND", $"ssh -o AddKeysToAgent=yes -i {SSHKey.Quoted()}");
-
-            // Force using en_US.UTF-8 locale
-            if (OperatingSystem.IsLinux())
-            {
-                start.Environment.Add("LANG", "C");
-                start.Environment.Add("LC_ALL", "C");
-            }
-
-            var builder = new StringBuilder();
-            builder
-                .Append("--no-pager -c core.quotepath=off -c credential.helper=")
-                .Append(Native.OS.CredentialHelper)
-                .Append(' ');
-
-            switch (Editor)
-            {
-                case EditorType.CoreEditor:
-                    builder.Append($"""-c core.editor="\"{selfExecFile}\" --core-editor" """);
-                    break;
-                case EditorType.RebaseEditor:
-                    builder.Append($"""-c core.editor="\"{selfExecFile}\" --rebase-message-editor" -c sequence.editor="\"{selfExecFile}\" --rebase-todo-editor" -c rebase.abbreviateCommands=true """);
-                    break;
-                default:
-                    builder.Append("-c core.editor=true ");
-                    break;
-            }
-
-            builder.Append(Args);
-            start.Arguments = builder.ToString();
-
-            // Working directory
-            if (!string.IsNullOrEmpty(WorkingDirectory))
-                start.WorkingDirectory = WorkingDirectory;
-
-            return start;
         }
 
         private void HandleOutput(string line, List<string> errs)
@@ -233,6 +210,20 @@ namespace SourceGit.Commands
 
             errs.Add(line);
         }
+
+        private void RemoveWorkingDirectoryIfRemote()
+        {
+            if (IsUsingRemoteStrategy())
+            {
+                WorkingDirectory = "";
+            }
+        }
+
+        protected bool IsUsingRemoteStrategy()
+        {
+            return ExecutionStrategy.GetType() == typeof(RemoteGitExecutionStrategy);
+        }
+
 
         [GeneratedRegex(@"\d+%")]
         private static partial Regex REG_PROGRESS();

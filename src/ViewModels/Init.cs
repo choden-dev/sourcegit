@@ -1,4 +1,5 @@
 ﻿using System.Threading.Tasks;
+using SourceGit.Utils;
 
 namespace SourceGit.ViewModels
 {
@@ -31,17 +32,19 @@ namespace SourceGit.ViewModels
             var log = new CommandLog("Initialize");
             Use(log);
 
-            var succ = await new Commands.Init(_pageId, _targetPath)
-                .Use(log)
-                .ExecAsync();
+            var initCommand =
+                new Commands.Init(_pageId, _targetPath).WithGitStrategy(
+                    Utils.CommandExtensions.GitStrategyType.Local);
+            var succ = await initCommand.Use(log).ExecAsync();
 
             log.Complete();
 
             if (succ)
             {
-                Preferences.Instance.FindOrAddNodeByRepositoryPath(_targetPath, _parentNode, true);
+                Preferences.Instance.FindOrAddNodeByRepositoryPath(_targetPath, null, true);
                 Welcome.Instance.Refresh();
             }
+
             return succ;
         }
 

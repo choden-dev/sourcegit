@@ -1,6 +1,7 @@
 ﻿using System;
 using System.ComponentModel.DataAnnotations;
 using System.Threading.Tasks;
+using SourceGit.Utils;
 
 namespace SourceGit.ViewModels
 {
@@ -58,6 +59,7 @@ namespace SourceGit.ViewModels
             var oldName = Target.FullName;
 
             var succ = await new Commands.Branch(_repo.FullPath, Target.Name)
+                .WithGitStrategy(Utils.CommandExtensions.GitStrategyType.Remote)
                 .Use(log)
                 .RenameAsync(fixedName);
 

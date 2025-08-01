@@ -1,4 +1,5 @@
 ﻿using System.Threading.Tasks;
+using SourceGit.Utils;
 
 namespace SourceGit.ViewModels
 {
@@ -66,12 +67,13 @@ namespace SourceGit.ViewModels
             Use(log);
 
             await new Commands.Merge(_repo.FullPath, _sourceName, Mode.Arg, Edit)
+                .WithGitStrategy(Utils.CommandExtensions.GitStrategyType.Remote)
                 .Use(log)
                 .ExecAsync();
 
             log.Complete();
-
-            var head = await new Commands.QueryRevisionByRefName(_repo.FullPath, "HEAD").GetResultAsync();
+            var head = await new Commands.QueryRevisionByRefName(_repo.FullPath, "HEAD")
+                .WithGitStrategy(Utils.CommandExtensions.GitStrategyType.Remote).GetResultAsync();
             _repo.NavigateToCommit(head, true);
             _repo.SetWatcherEnabled(true);
             return true;
@@ -79,7 +81,8 @@ namespace SourceGit.ViewModels
 
         private Models.MergeMode AutoSelectMergeMode()
         {
-            var config = new Commands.Config(_repo.FullPath).GetAsync($"branch.{Into}.mergeoptions").Result;
+            var configCommand = new Commands.Config(_repo.FullPath);
+            var config = configCommand.GetAsync($"branch.{Into}.mergeoptions").Result;
             var mode = config switch
             {
                 "--ff-only" => Models.MergeMode.FastForward,

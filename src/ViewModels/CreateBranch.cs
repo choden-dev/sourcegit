@@ -1,6 +1,7 @@
 ﻿using System;
 using System.ComponentModel.DataAnnotations;
 using System.Threading.Tasks;
+using SourceGit.Utils;
 
 namespace SourceGit.ViewModels
 {
@@ -125,9 +126,11 @@ namespace SourceGit.ViewModels
 
             if (CheckoutAfterCreated)
             {
-                if (_repo.CurrentBranch is { IsDetachedHead: true } && !_repo.CurrentBranch.Head.Equals(_baseOnRevision, StringComparison.Ordinal))
+                if (_repo.CurrentBranch is { IsDetachedHead: true } &&
+                    !_repo.CurrentBranch.Head.Equals(_baseOnRevision, StringComparison.Ordinal))
                 {
-                    var refs = await new Commands.QueryRefsContainsCommit(_repo.FullPath, _repo.CurrentBranch.Head).GetResultAsync();
+                    var refs = await new Commands.QueryRefsContainsCommit(_repo.FullPath, _repo.CurrentBranch.Head)
+                        .WithGitStrategy(Utils.CommandExtensions.GitStrategyType.Remote).GetResultAsync();
                     if (refs.Count == 0)
                     {
                         var msg = App.Text("Checkout.WarnLostCommits");
@@ -147,10 +150,12 @@ namespace SourceGit.ViewModels
                 var needPopStash = false;
                 if (!DiscardLocalChanges)
                 {
-                    var changes = await new Commands.CountLocalChangesWithoutUntracked(_repo.FullPath).GetResultAsync();
+                    var changes = await new Commands.CountLocalChangesWithoutUntracked(_repo.FullPath)
+                        .WithGitStrategy(Utils.CommandExtensions.GitStrategyType.Remote).GetResultAsync();
                     if (changes > 0)
                     {
                         succ = await new Commands.Stash(_repo.FullPath)
+                            .WithGitStrategy(Utils.CommandExtensions.GitStrategyType.Remote)
                             .Use(log)
                             .PushAsync("CREATE_BRANCH_AUTO_STASH");
                         if (!succ)
@@ -165,6 +170,7 @@ namespace SourceGit.ViewModels
                 }
 
                 succ = await new Commands.Checkout(_repo.FullPath)
+                    .WithGitStrategy(Utils.CommandExtensions.GitStrategyType.Remote)
                     .Use(log)
                     .BranchAsync(fixedName, _baseOnRevision, DiscardLocalChanges, _allowOverwrite);
 
@@ -172,15 +178,18 @@ namespace SourceGit.ViewModels
                 {
                     if (IsRecurseSubmoduleVisible && RecurseSubmodules)
                     {
-                        var submodules = await new Commands.QueryUpdatableSubmodules(_repo.FullPath).GetResultAsync();
+                        var submodules = await new Commands.QueryUpdatableSubmodules(_repo.FullPath)
+                            .WithGitStrategy(Utils.CommandExtensions.GitStrategyType.Remote).GetResultAsync();
                         if (submodules.Count > 0)
                             await new Commands.Submodule(_repo.FullPath)
+                                .WithGitStrategy(Utils.CommandExtensions.GitStrategyType.Remote)
                                 .Use(log)
                                 .UpdateAsync(submodules, true, true);
                     }
 
                     if (needPopStash)
                         await new Commands.Stash(_repo.FullPath)
+                            .WithGitStrategy(Utils.CommandExtensions.GitStrategyType.Remote)
                             .Use(log)
                             .PopAsync("stash@{0}");
                 }
@@ -188,6 +197,7 @@ namespace SourceGit.ViewModels
             else
             {
                 succ = await new Commands.Branch(_repo.FullPath, fixedName)
+                    .WithGitStrategy(Utils.CommandExtensions.GitStrategyType.Remote)
                     .Use(log)
                     .CreateAsync(_baseOnRevision, _allowOverwrite);
             }
@@ -206,6 +216,7 @@ namespace SourceGit.ViewModels
 
                 if (autoSetUpstream)
                     await new Commands.Branch(_repo.FullPath, fixedName)
+                        .WithGitStrategy(Utils.CommandExtensions.GitStrategyType.Remote)
                         .Use(log)
                         .SetUpstreamAsync(basedOn);
             }
@@ -224,7 +235,6 @@ namespace SourceGit.ViewModels
 
                 if (_repo.HistoriesFilterMode == Models.FilterMode.Included)
                     _repo.SetBranchFilterMode(fake, Models.FilterMode.Included, true, false);
-
             }
 
             _repo.MarkBranchesDirtyManually();

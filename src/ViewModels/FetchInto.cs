@@ -1,4 +1,5 @@
 ﻿using System.Threading.Tasks;
+using SourceGit.Utils;
 
 namespace SourceGit.ViewModels
 {
@@ -30,12 +31,15 @@ namespace SourceGit.ViewModels
             Use(log);
 
             await new Commands.Fetch(_repo.FullPath, Local, Upstream)
+                .WithGitStrategy(_repo.GitStrategyType)
                 .Use(log)
                 .RunAsync();
 
             log.Complete();
 
-            var newHead = await new Commands.QueryRevisionByRefName(_repo.FullPath, Local.Name).GetResultAsync();
+            var newHead = await new Commands.QueryRevisionByRefName(_repo.FullPath, Local.Name)
+                .WithGitStrategy(_repo.GitStrategyType)
+                .GetResultAsync();
             _repo.NavigateToCommit(newHead, true);
             _repo.SetWatcherEnabled(true);
             return true;

@@ -1,10 +1,9 @@
 ﻿using System;
 using System.IO;
 using System.Threading.Tasks;
-
 using Avalonia.Threading;
-
 using CommunityToolkit.Mvvm.ComponentModel;
+using SourceGit.Utils;
 
 namespace SourceGit.ViewModels
 {
@@ -53,7 +52,10 @@ namespace SourceGit.ViewModels
             private set => SetProperty(ref _unifiedLines, value);
         }
 
-        public DiffContext(string repo, Models.DiffOption option, DiffContext previous = null)
+        private readonly Utils.CommandExtensions.GitStrategyType _gitStrategy;
+
+        public DiffContext(string repo, Models.DiffOption option, DiffContext previous = null,
+            Utils.CommandExtensions.GitStrategyType gitStrategy = Utils.CommandExtensions.GitStrategyType.Local)
         {
             _repo = repo;
             _option = option;
@@ -66,6 +68,8 @@ namespace SourceGit.ViewModels
                 _unifiedLines = previous._unifiedLines;
                 _info = previous._info;
             }
+
+            _gitStrategy = gitStrategy;
 
             if (string.IsNullOrEmpty(_option.OrgPath) || _option.OrgPath == "/dev/null")
                 Title = _option.Path;
@@ -114,7 +118,9 @@ namespace SourceGit.ViewModels
                 var numLines = Preferences.Instance.UseFullTextDiff ? 999999999 : _unifiedLines;
                 var ignoreWhitespace = Preferences.Instance.IgnoreWhitespaceChangesInDiff;
 
-                var latest = await new Commands.Diff(_repo, _option, numLines, ignoreWhitespace)
+                var diffCommand = new Commands.Diff(_repo, _option, numLines, ignoreWhitespace)
+                    .WithGitStrategy(_gitStrategy);
+                var latest = await diffCommand
                     .ReadAsync()
                     .ConfigureAwait(false);
 
@@ -145,9 +151,11 @@ namespace SourceGit.ViewModels
 
                             var sha = line.Content.Substring(18);
                             if (line.Type == Models.TextDiffLineType.Added)
-                                submoduleDiff.New = await QuerySubmoduleRevisionAsync(submoduleRoot, sha).ConfigureAwait(false);
+                                submoduleDiff.New = await QuerySubmoduleRevisionAsync(submoduleRoot, sha)
+                                    .ConfigureAwait(false);
                             else if (line.Type == Models.TextDiffLineType.Deleted)
-                                submoduleDiff.Old = await QuerySubmoduleRevisionAsync(submoduleRoot, sha).ConfigureAwait(false);
+                                submoduleDiff.Old = await QuerySubmoduleRevisionAsync(submoduleRoot, sha)
+                                    .ConfigureAwait(false);
                         }
 
                         if (isSubmodule)
@@ -171,8 +179,12 @@ namespace SourceGit.ViewModels
 
                         if (_option.Revisions.Count == 2)
                         {
-                            var oldImage = await ImageSource.FromRevisionAsync(_repo, _option.Revisions[0], oldPath, imgDecoder).ConfigureAwait(false);
-                            var newImage = await ImageSource.FromRevisionAsync(_repo, _option.Revisions[1], _option.Path, imgDecoder).ConfigureAwait(false);
+                            var oldImage = await ImageSource
+                                .FromRevisionAsync(_repo, _option.Revisions[0], oldPath, imgDecoder)
+                                .ConfigureAwait(false);
+                            var newImage = await ImageSource
+                                .FromRevisionAsync(_repo, _option.Revisions[1], _option.Path, imgDecoder)
+                                .ConfigureAwait(false);
                             imgDiff.Old = oldImage.Bitmap;
                             imgDiff.OldFileSize = oldImage.Size;
                             imgDiff.New = newImage.Bitmap;
@@ -182,7 +194,8 @@ namespace SourceGit.ViewModels
                         {
                             if (!oldPath.Equals("/dev/null", StringComparison.Ordinal))
                             {
-                                var oldImage = await ImageSource.FromRevisionAsync(_repo, "HEAD", oldPath, imgDecoder).ConfigureAwait(false);
+                                var oldImage = await ImageSource.FromRevisionAsync(_repo, "HEAD", oldPath, imgDecoder)
+                                    .ConfigureAwait(false);
                                 imgDiff.Old = oldImage.Bitmap;
                                 imgDiff.OldFileSize = oldImage.Size;
                             }
@@ -190,7 +203,8 @@ namespace SourceGit.ViewModels
                             var fullPath = Path.Combine(_repo, _option.Path);
                             if (File.Exists(fullPath))
                             {
-                                var newImage = await ImageSource.FromFileAsync(fullPath, imgDecoder).ConfigureAwait(false);
+                                var newImage = await ImageSource.FromFileAsync(fullPath, imgDecoder)
+                                    .ConfigureAwait(false);
                                 imgDiff.New = newImage.Bitmap;
                                 imgDiff.NewFileSize = newImage.Size;
                             }
@@ -203,15 +217,24 @@ namespace SourceGit.ViewModels
                         var binaryDiff = new Models.BinaryDiff();
                         if (_option.Revisions.Count == 2)
                         {
-                            binaryDiff.OldSize = await new Commands.QueryFileSize(_repo, oldPath, _option.Revisions[0]).GetResultAsync().ConfigureAwait(false);
-                            binaryDiff.NewSize = await new Commands.QueryFileSize(_repo, _option.Path, _option.Revisions[1]).GetResultAsync().ConfigureAwait(false);
+                            var oldSizeCommand = new Commands.QueryFileSize(_repo, oldPath, _option.Revisions[0])
+                                .WithGitStrategy(_gitStrategy);
+                            binaryDiff.OldSize = await oldSizeCommand.GetResultAsync().ConfigureAwait(false);
+
+                            var newSizeCommand = new Commands.QueryFileSize(_repo, _option.Path, _option.Revisions[1])
+                                .WithGitStrategy(_gitStrategy);
+
+                            binaryDiff.NewSize = await newSizeCommand.GetResultAsync().ConfigureAwait(false);
                         }
                         else
                         {
                             var fullPath = Path.Combine(_repo, _option.Path);
-                            binaryDiff.OldSize = await new Commands.QueryFileSize(_repo, oldPath, "HEAD").GetResultAsync().ConfigureAwait(false);
+                            var oldSizeCommand = new Commands.QueryFileSize(_repo, oldPath, "HEAD")
+                                .WithGitStrategy(_gitStrategy);
+                            binaryDiff.OldSize = await oldSizeCommand.GetResultAsync().ConfigureAwait(false);
                             binaryDiff.NewSize = File.Exists(fullPath) ? new FileInfo(fullPath).Length : 0;
                         }
+
                         rs = binaryDiff;
                     }
                 }
@@ -242,11 +265,15 @@ namespace SourceGit.ViewModels
 
         private async Task<Models.RevisionSubmodule> QuerySubmoduleRevisionAsync(string repo, string sha)
         {
-            var commit = await new Commands.QuerySingleCommit(repo, sha).GetResultAsync().ConfigureAwait(false);
+            var commitCommand = new Commands.QuerySingleCommit(repo, sha)
+                .WithGitStrategy(_gitStrategy);
+            var commit = await commitCommand.GetResultAsync().ConfigureAwait(false);
             if (commit == null)
                 return new Models.RevisionSubmodule() { Commit = new Models.Commit() { SHA = sha } };
 
-            var body = await new Commands.QueryCommitFullMessage(repo, sha).GetResultAsync().ConfigureAwait(false);
+            var messageCommand = new Commands.QueryCommitFullMessage(repo, sha)
+                .WithGitStrategy(_gitStrategy);
+            var body = await messageCommand.GetResultAsync().ConfigureAwait(false);
             return new Models.RevisionSubmodule()
             {
                 Commit = commit,
@@ -274,10 +301,10 @@ namespace SourceGit.ViewModels
             public bool IsSame(Info other)
             {
                 return Argument.Equals(other.Argument, StringComparison.Ordinal) &&
-                    UnifiedLines == other.UnifiedLines &&
-                    IgnoreWhitespace == other.IgnoreWhitespace &&
-                    OldHash.Equals(other.OldHash, StringComparison.Ordinal) &&
-                    NewHash.Equals(other.NewHash, StringComparison.Ordinal);
+                       UnifiedLines == other.UnifiedLines &&
+                       IgnoreWhitespace == other.IgnoreWhitespace &&
+                       OldHash.Equals(other.OldHash, StringComparison.Ordinal) &&
+                       NewHash.Equals(other.NewHash, StringComparison.Ordinal);
             }
         }
 

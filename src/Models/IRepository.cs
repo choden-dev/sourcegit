@@ -11,5 +11,6 @@
         void RefreshSubmodules();
         void RefreshWorkingCopyChanges();
         void RefreshStashes();
+        void RefreshAll();
     }
 }
